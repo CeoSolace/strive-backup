@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+  <%- include('includes/head') %>
+
+  <body class="hold-transition skin-dark sidebar-mini">
+    <div class="wrapper" style="background-color: #0f0f0f; color: #e0e0e0;">
+      <!-- Header -->
+      <%- include('includes/header') %>
+
+      <!-- Sidebar -->
+      <%- include('includes/sidebar') %>
+
+      <!-- Content Wrapper -->
+      <div class="content-wrapper" style="background-color: #121212;">
+        <!-- Content Header -->
+        <section class="content-header" style="padding: 20px 24px; border-bottom: 1px solid #2a2a2a;">
+          <h1 style="font-weight: 700; font-size: 1.8rem; color: #f0f0f0; margin: 0;">
+            Strive Dash <small style="color: #aaa; font-weight: 400;">v1.0.0-beta</small>
+          </h1>
+          <ol class="breadcrumb" style="background: transparent; padding: 0; margin-top: 8px; font-size: 0.95rem;">
+            <li class="active">
+              <a href="/" style="color: #bb86fc; text-decoration: none; display: flex; align-items: center; gap: 6px;">
+                <i class="fa fa-home"></i> Selector
+              </a>
+            </li>
+          </ol>
+        </section>
+
+        <!-- Main Content -->
+        <section class="content" style="padding: 24px;">
+          <div class="row">
+            <% if(user.displayedGuilds && user.displayedGuilds.length > 0) { %>
+              <% user.displayedGuilds.forEach(function(guild) { %>
+                <div class="col-md-3 col-sm-6 col-xs-12" style="margin-bottom: 24px;">
+                  <div class="box" style="background: #1e1e1e; border-radius: 14px; border: 1px solid #2d2d2d; overflow: hidden; transition: transform 0.25s ease, box-shadow 0.25s ease; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+                    <div class="box-header with-border text-center" style="padding: 16px 12px; background: rgba(30, 30, 30, 0.85); border-bottom: 1px solid #2a2a2a;">
+                      <i class="fas fa-crown" style="color: #FFD700; margin-right: 6px;"></i>
+                      <h3 class="box-title server-name" style="font-size: 1.15rem; font-weight: 600; color: #f0f0f0; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 8px;">
+                        <%= guild.name %>
+                      </h3>
+                    </div>
+                    <div class="box-body" style="padding: 20px 0;">
+                      <div class="text-center">
+                        <img
+                          src="<%= guild.iconURL || '/assets/default-server-icon.png' %>"
+                          style="border-radius: 50%; width: 100px; height: 100px; object-fit: cover; border: 2px solid #333;"
+                          class="img-fluid"
+                          onerror="this.src='/assets/default-server-icon.png'"
+                        />
+                      </div>
+                    </div>
+                    <div class="box-footer" style="padding: 16px; background: rgba(25, 25, 25, 0.9); border-top: 1px solid #2a2a2a;">
+                      <% if(guild.settingsUrl.includes('discordapp.com') || guild.settingsUrl.includes('discord.com')) { %>
+                        <a href="<%= guild.settingsUrl %>" style="text-decoration: none;">
+                          <button class="btn btn-block" style="background: #5865F2; color: white; font-weight: 600; border: none; border-radius: 8px; padding: 10px 16px; transition: background 0.2s;">
+                            <i class="fab fa-discord" style="margin-right: 6px;"></i> Invite
+                          </button>
+                        </a>
+                      <% } else { %>
+                        <a href="<%= guild.settingsUrl %>" style="text-decoration: none;">
+                          <button class="btn btn-block" style="background: #00b37e; color: white; font-weight: 600; border: none; border-radius: 8px; padding: 10px 16px; transition: background 0.2s;">
+                            <i class="fas fa-cog" style="margin-right: 6px;"></i> Manage
+                          </button>
+                        </a>
+                      <% } %>
+                    </div>
+                  </div>
+                </div>
+              <% }); %>
+            <% } else { %>
+              <div class="col-md-12">
+                <div class="box box-warning" style="background: #1e1e1e; border-radius: 12px; border: 1px solid #444; color: #ccc;">
+                  <div class="box-header with-border" style="padding: 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333;">
+                    <h3 class="box-title" style="font-weight: 600; color: #ffcc00; margin: 0;">No server found</h3>
+                    <div class="box-tools">
+                      <button type="button" class="btn btn-box-tool" data-widget="collapse" style="color: #aaa; background: none; border: none; outline: none;">
+                        <i class="fa fa-minus"></i>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="box-body" style="padding: 20px; font-size: 1rem;">
+                    No server to display. Make sure you’re logged in with the correct account and have access to at least one server.
+                  </div>
+                </div>
+              </div>
+            <% } %>
+          </div>
+        </section>
+      </div>
+
+      <!-- Footer -->
+      <%- include('includes/footer') %>
+    </div>
+    <!-- ./wrapper -->
+
+    <style>
+      .box:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+      }
+      .btn:hover {
+        opacity: 0.92;
+      }
+    </style>
+  </body>
+</html>

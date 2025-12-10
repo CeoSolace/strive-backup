@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+  <%- include('../includes/head') %>
+
+  <body class="hold-transition skin-dark sidebar-mini">
+    <div class="wrapper" style="background-color: #0f0f0f; color: #e0e0e0;">
+      <!-- Header -->
+      <%- include('../includes/header') %>
+
+      <!-- Sidebar -->
+      <%- include('../includes/sidebar') %>
+
+      <!-- Content Wrapper -->
+      <div class="content-wrapper" style="background-color: #121212;">
+        <!-- Content Header -->
+        <section class="content-header" style="padding: 20px 24px; border-bottom: 1px solid #2a2a2a;">
+          <h3 style="font-weight: 600; color: #f0f0f0;">Greeting</h3>
+          <ol class="breadcrumb" style="background: transparent; padding: 0; margin-top: 8px; font-size: 0.95rem;">
+            <li><a href="/" style="color: #bb86fc; text-decoration: none;"><i class="fa fa-home"></i> Selector</a></li>
+            <li><a href="/manage/<%= guild.id %>" style="color: #bb86fc; text-decoration: none;"><%= guild.name %></a></li>
+            <li class="active" style="color: #aaa;">Greeting</li>
+          </ol>
+        </section>
+
+        <section class="content" style="padding: 24px;">
+          <div class="row">
+            <div class="col-md-6">
+              <!-- WELCOME CONFIGURATION -->
+              <div class="box" style="background: #1e1e1e; border: 1px solid #2d2d2d; border-radius: 10px; margin-bottom: 24px;">
+                <div class="box-header with-border" style="padding: 14px 16px; border-bottom: 1px solid #2a2a2a; background: rgba(35, 100, 40, 0.2);">
+                  <h3 class="box-title" style="font-weight: 600; color: #a0e0a0;">Welcome Embed</h3>
+                </div>
+                <form role="form" action="/manage/<%= guild.id %>/greeting" method="POST">
+                  <div class="box-body" style="padding: 20px;">
+                    <div class="form-group">
+                      <label style="color: #ccc;">Content</label>
+                      <% if(guild.welcome.embed.description || guild.welcome.content) { %>
+                        <textarea rows="3" name="content" class="form-control" style="background: #252525; border: 1px solid #333; color: #f0f0f0; padding: 10px; border-radius: 6px; font-family: monospace;"><%- guild.welcome.content?.replaceAll(/\\n/g, '\n') || '' %></textarea>
+                      <% } else { %>
+                        <textarea rows="3" name="content" class="form-control" placeholder="Welcome to the server {member:name} 🎉" style="background: #252525; border: 1px solid #333; color: #f0f0f0; padding: 10px; border-radius: 6px; font-family: monospace;"></textarea>
+                      <% } %>
+                    </div>
+                    <div class="form-group">
+                      <label style="color: #ccc;">Description</label>
+                      <textarea rows="3" name="description" class="form-control" style="background: #252525; border: 1px solid #333; color: #f0f0f0; padding: 10px; border-radius: 6px; font-family: monospace;"><%- guild.welcome.embed.description?.replaceAll(/\\n/g, '\n') || '' %></textarea>
+                    </div>
+                    <div class="form-group">
+                      <label style="color: #ccc;">Footer</label>
+                      <input type="text" name="footer" class="form-control" value="<%= guild.welcome.embed.footer || '' %>" style="background: #252525; border: 1px solid #333; color: #f0f0f0; padding: 8px 12px; border-radius: 6px;">
+                    </div>
+                    <div class="form-group">
+                      <label style="color: #ccc;">Hex Color</label>
+                      <input type="text" name="hexcolor" class="form-control" value="<%= guild.welcome.embed.color || '#4caf50' %>" style="background: #252525; border: 1px solid #333; color: #f0f0f0; padding: 8px 12px; border-radius: 6px;">
+                    </div>
+                    <div class="form-group">
+                      <label style="color: #ccc;">Image URL</label>
+                      <input type="text" name="image" class="form-control" value="<%= guild.welcome.embed.image || '' %>" style="background: #252525; border: 1px solid #333; color: #f0f0f0; padding: 8px 12px; border-radius: 6px;">
+                    </div>
+                    <div class="form-group">
+                      <label style="color: #ccc;">Channel</label>
+                      <select class="form-control" name="channel" style="background: #252525; border: 1px solid #333; color: #f0f0f0; padding: 8px 12px; border-radius: 6px;">
+                        <% if(bot.channels.cache.has(guild.welcome.channel)){ %>
+                          <option selected="selected">#<%= bot.channels.cache.get(guild.welcome.channel).name %></option>
+                          <% guild.channels.cache.filter((ch) => ch.id !== guild.welcome.channel && ch.type === 0).forEach((ch) => { %>
+                            <option>#<%= ch.name %></option>
+                          <% }); %>
+                        <% } else { %>
+                          <option disabled selected value> -- select an option -- </option>
+                          <% guild.channels.cache.filter((ch) => ch.type === 0).forEach((ch) => { %>
+                            <option>#<%= ch.name %></option>
+                          <% }); %>
+                        <% } %>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <div class="checkbox" style="color: #ccc;">
+                        <label>
+                          <% if(guild.welcome.embed.thumbnail) { %>
+                            <input type="checkbox" name="thumbnail" checked style="margin-right: 8px; transform: scale(1.1);">
+                          <% } else { %>
+                            <input type="checkbox" name="thumbnail" style="margin-right: 8px; transform: scale(1.1);">
+                          <% } %>
+                          Thumbnail
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="box-footer" style="padding: 16px; background: rgba(25, 25, 25, 0.7); border-top: 1px solid #2a2a2a;">
+                    <% if(guild.welcome.enabled) { %>
+                      <button type="submit" name="welcomeDisable" class="btn btn-danger" style="background: #ff4d4d; color: #fff; border: none; font-weight: 600; padding: 8px 16px; border-radius: 6px;">Disable Messages</button>
+                      <button type="submit" name="welcomeUpdate" class="btn btn-success pull-right" style="background: #4caf50; color: #fff; border: none; font-weight: 600; padding: 8px 16px; border-radius: 6px;">Update</button>
+                    <% } else { %>
+                      <button type="submit" name="welcomeEnable" class="btn btn-success" style="background: #4caf50; color: #fff; border: none; font-weight: 600; padding: 8px 16px; border-radius: 6px;">Enable Message</button>
+                    <% } %>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <div class="col-md-6">
+              <!-- FAREWELL CONFIGURATION -->
+              <div class="box" style="background: #1e1e1e; border: 1px solid #2d2d2d; border-radius: 10px;">
+                <div class="box-header with-border" style="padding: 14px 16px; border-bottom: 1px solid #2a2a2a; background: rgba(100, 35, 35, 0.2);">
+                  <h3 class="box-title" style="font-weight: 600; color: #f0a0a0;">Farewell Configuration</h3>
+                </div>
+                <form role="form" action="/manage/<%= guild.id %>/greeting" method="POST">
+                  <div class="box-body" style="padding: 20px;">
+                    <div class="form-group">
+                      <label style="color: #ccc;">Content</label>
+                      <% if(guild.farewell.embed.description || guild.farewell.content) { %>
+                        <textarea rows="3" name="content" class="form-control" style="background: #252525; border: 1px solid #333; color: #f0f0f0; padding: 10px; border-radius: 6px; font-family: monospace;"><%- guild.farewell.content?.replaceAll(/\\n/g, '\n') || '' %></textarea>
+                      <% } else { %>
+                        <textarea rows="3" name="content" class="form-control" placeholder="{member:tag} has left the server 👋" style="background: #252525; border: 1px solid #333; color: #f0f0f0; padding: 10px; border-radius: 6px; font-family: monospace;"></textarea>
+                      <% } %>
+                    </div>
+                    <div class="form-group">
+                      <label style="color: #ccc;">Description</label>
+                      <textarea rows="3" name="description" class="form-control" style="background: #252525; border: 1px solid #333; color: #f0f0f0; padding: 10px; border-radius: 6px; font-family: monospace;"><%- guild.farewell.embed.description?.replaceAll(/\\n/g, '\n') || '' %></textarea>
+                    </div>
+                    <div class="form-group">
+                      <label style="color: #ccc;">Footer</label>
+                      <input type="text" name="footer" class="form-control" value="<%= guild.farewell.embed.footer || '' %>" style="background: #252525; border: 1px solid #333; color: #f0f0f0; padding: 8px 12px; border-radius: 6px;">
+                    </div>
+                    <div class="form-group">
+                      <label style="color: #ccc;">Hex Color</label>
+                      <input type="text" name="hexcolor" class="form-control" value="<%= guild.farewell.embed.color || '#f44336' %>" style="background: #252525; border: 1px solid #333; color: #f0f0f0; padding: 8px 12px; border-radius: 6px;">
+                    </div>
+                    <div class="form-group">
+                      <label style="color: #ccc;">Image URL</label>
+                      <input type="text" name="image" class="form-control" value="<%= guild.farewell.embed.image || '' %>" style="background: #252525; border: 1px solid #333; color: #f0f0f0; padding: 8px 12px; border-radius: 6px;">
+                    </div>
+                    <div class="form-group">
+                      <label style="color: #ccc;">Channel</label>
+                      <select class="form-control" name="channel" style="background: #252525; border: 1px solid #333; color: #f0f0f0; padding: 8px 12px; border-radius: 6px;">
+                        <% if(bot.channels.cache.has(guild.farewell.channel)) { %>
+                          <option selected="selected">#<%= bot.channels.cache.get(guild.farewell.channel).name %></option>
+                          <% guild.channels.cache.filter((ch) => ch.id !== guild.farewell.channel && ch.type === 0).forEach((ch) => { %>
+                            <option>#<%= ch.name %></option>
+                          <% }); %>
+                        <% } else { %>
+                          <option disabled selected value> -- select an option -- </option>
+                          <% guild.channels.cache.filter((ch) => ch.type === 0).forEach((ch) => { %>
+                            <option>#<%= ch.name %></option>
+                          <% }); %>
+                        <% } %>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <div class="checkbox" style="color: #ccc;">
+                        <label>
+                          <% if(guild.farewell.embed.thumbnail) { %>
+                            <input type="checkbox" name="thumbnail" checked style="margin-right: 8px; transform: scale(1.1);">
+                          <% } else { %>
+                            <input type="checkbox" name="thumbnail" style="margin-right: 8px; transform: scale(1.1);">
+                          <% } %>
+                          Thumbnail
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="box-footer" style="padding: 16px; background: rgba(25, 25, 25, 0.7); border-top: 1px solid #2a2a2a;">
+                    <% if(guild.farewell.enabled) { %>
+                      <button type="submit" name="farewellDisable" class="btn btn-danger" style="background: #ff4d4d; color: #fff; border: none; font-weight: 600; padding: 8px 16px; border-radius: 6px;">Disable Messages</button>
+                      <button type="submit" name="farewellUpdate" class="btn btn-danger pull-right" style="background: #f44336; color: #fff; border: none; font-weight: 600; padding: 8px 16px; border-radius: 6px;">Update</button>
+                    <% } else { %>
+                      <button type="submit" name="farewellEnable" class="btn btn-danger" style="background: #f44336; color: #fff; border: none; font-weight: 600; padding: 8px 16px; border-radius: 6px;">Enable Message</button>
+                    <% } %>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Footer -->
+      <%- include('../includes/footer') %>
+    </div>
+    <!-- ./wrapper -->
+  </body>
+</html>

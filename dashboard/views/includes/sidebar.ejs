@@ -1,0 +1,61 @@
+<!-- Left side column. contains the logo and sidebar -->
+<aside class="main-sidebar">
+    <section class="sidebar">
+        <!-- Sidebar user panel -->
+        <div class="user-panel" style="padding: 15px; display: flex; align-items: center; border-bottom: 1px solid #2a2a2a; margin-bottom: 16px;">
+            <div class="pull-left image" style="margin-right: 12px;">
+                <img src="<%= user.displayAvatar %>" class="img-circle" alt="User Image" style="width: 40px; height: 40px; border: 2px solid #333;">
+            </div>
+            <div class="pull-left info" style="color: #f0f0f0; font-weight: 500;">
+                <p style="margin: 0; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;">
+                    <%= user.username %>
+                </p>
+            </div>
+        </div>
+
+        <!-- Dashboard branding -->
+        <div style="padding: 8px 10px; text-align: center; color: #bbb; font-size: 13px; margin: 0 0 16px 0; border-bottom: 1px solid #2a2a2a;">
+            <strong>Strive Dashboard</strong><br>
+            <span style="font-size: 12px;">Made by <span style="color: #4caf50;">ceosolace</span></span>
+        </div>
+
+        <!-- Servers section -->
+        <ul class="sidebar-menu" data-widget="tree">
+            <li class="header" style="color: #aaa; font-size: 11px; padding-left: 12px;">SERVERS MANAGEMENT</li>
+            <li>
+                <a href="/selector" style="padding-left: 15px;">
+                    <i class="fa fa-home"></i> <span>Selector</span>
+                </a>
+            </li>
+        </ul>
+
+        <% if (locals.guild) { %>
+        <ul class="sidebar-menu" data-widget="tree" style="margin-top: 12px;">
+            <li class="header" style="color: #aaa; font-size: 11px; padding-left: 12px;">CONFIGURATION</li>
+            <li>
+                <a href="/manage/<%= guild.id %>/basic" style="padding-left: 15px;">
+                    <i class="fa fa-gear"></i> <span>Basic</span>
+                </a>
+            </li>
+            <li>
+                <a href="/manage/<%= guild.id %>/greeting" style="padding-left: 15px;">
+                    <i class="fa fa-bullhorn"></i> <span>Greeting</span>
+                </a>
+            </li>
+        </ul>
+        <% } %>
+
+        <!-- Bottom footer -->
+        <div style="position: absolute; bottom: 10px; left: 0; right: 0; text-align: center; color: #666; font-size: 11px; padding: 0 10px;">
+            © 2025 Strive — ceosolace
+        </div>
+    </section>
+</aside>
+
+<script>
+    $(document).ready(function() {
+        let pathname = window.location.pathname;
+        $('.sidebar-menu li').removeClass('active');
+        $('.sidebar-menu a[href="' + pathname + '"]').closest('li').addClass('active');
+    });
+</script>
