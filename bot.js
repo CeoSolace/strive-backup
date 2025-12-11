@@ -29,7 +29,7 @@ process.on("unhandledRejection", (err) => client.logger.error(`Unhandled excepti
   // check for updates
   await checkForUpdates();
 
-  // start the dashboard
+  // start the dashboard if enabled
   if (client.config.DASHBOARD.enabled) {
     client.logger.log("Launching dashboard");
     try {
@@ -39,15 +39,14 @@ process.on("unhandledRejection", (err) => client.logger.error(`Unhandled excepti
       client.logger.error("Failed to launch dashboard", ex);
     }
   } else {
+    // only init DB if dashboard is off (dashboard handles it otherwise)
     await initializeMongoose();
   }
 
-  // start the client and login
+  // login bot
   await client.login(process.env.BOT_TOKEN);
 
-  // --------------------------------------------------------
-  // GLOBAL SLASH COMMAND REGISTRATION
-  // --------------------------------------------------------
+  // register global slash commands
   try {
     client.logger.log("Registering global slash commands...");
     await client.registerInteractions();
