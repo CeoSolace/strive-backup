@@ -3,7 +3,6 @@ const config = require("@root/config"),
   CheckAuth = require("./auth/CheckAuth");
 
 module.exports.launch = async (client) => {
-  /* Init express app */
   const express = require("express"),
     session = require("express-session"),
     MongoStore = require("connect-mongo"),
@@ -11,7 +10,6 @@ module.exports.launch = async (client) => {
     path = require("path"),
     app = express();
 
-  /* Routers */
   const mainRouter = require("./routes/index"),
     discordAPIRouter = require("./routes/discord"),
     logoutRouter = require("./routes/logout"),
@@ -22,7 +20,9 @@ module.exports.launch = async (client) => {
 
   const db = await mongoose.initializeMongoose();
 
-  /* App configuration */
+  // Use Render's PORT or fallback to config for local dev
+  const port = process.env.PORT || config.DASHBOARD.port;
+
   app
     .use(express.json())
     .use(express.urlencoded({ extended: true }))
@@ -30,7 +30,6 @@ module.exports.launch = async (client) => {
     .set("view engine", "ejs")
     .use(express.static(path.join(__dirname, "/public")))
     .set("views", path.join(__dirname, "/views"))
-    .set("port", config.DASHBOARD.port)
     .use(
       session({
         secret: process.env.SESSION_PASSWORD,
@@ -48,7 +47,7 @@ module.exports.launch = async (client) => {
         }),
       })
     )
-    .use(async function (req, res, next) {
+    .use(async (req, res, next) => {
       req.user = req.session.user;
       req.client = client;
       if (req.user && req.url !== "/")
@@ -59,13 +58,13 @@ module.exports.launch = async (client) => {
     .use("/logout", logoutRouter)
     .use("/manage", guildManagerRouter)
     .use("/", mainRouter)
-    .use(CheckAuth, function (req, res) {
+    .use(CheckAuth, (req, res) => {
       res.status(404).render("404", {
         user: req.userInfos,
         currentURL: `${req.protocol}://${req.get("host")}${req.originalUrl}`,
       });
     })
-    .use(CheckAuth, function (err, req, res) {
+    .use(CheckAuth, (err, req, res, next) => {
       console.error(err.stack);
       if (!req.user) return res.redirect("/");
       res.status(500).render("500", {
@@ -74,13 +73,10 @@ module.exports.launch = async (client) => {
       });
     });
 
-  /* -------------------------------------------------------------- */
-  /*                    NORMAL HTTP SERVER ONLY                     */
-  /* -------------------------------------------------------------- */
-
-  app.listen(app.get("port"), () => {
+  // Bind to 0.0.0.0 and dynamic PORT
+  app.listen(port, "0.0.0.0", () => {
     client.logger.success(
-      `Dashboard is listening on HTTP port ${app.get("port")} (handled by NGINX HTTPS)`
+      `Dashboard is listening on HTTP port ${port} (handled by NGINX HTTPS)`
     );
   });
 };
