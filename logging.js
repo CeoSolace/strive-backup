@@ -257,7 +257,7 @@ class OmniDiscordLogger {
       .setColor(this.COLOR_MAP[categoryName] || Colors.Blurple)
       .setTimestamp()
       .setFooter({ 
-        text: `OmniLogger v6.0 • ${new Date().toISOString().split('T')[0]}`,
+        text: `Strive Logging v6.0 • ${new Date().toISOString().split('T')[0]}`,
         iconURL: this.client.user.displayAvatarURL()
       });
 
