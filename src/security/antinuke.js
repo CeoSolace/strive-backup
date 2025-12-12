@@ -105,6 +105,18 @@ module.exports = (client) => {
     if (newMember.user.id === newMember.guild.ownerId) return;
     if (isWhitelisted(newMember.guild, newMember.user)) return;
 
+    // Check if admin permission was granted by a whitelisted user via role assignment
+    const auditLog = await newMember.guild.fetchAuditLogs({ limit: 1, type: 25 }).catch(() => null);
+    const entry = auditLog?.entries.first();
+    if (
+      entry &&
+      (entry.changes.some(change => change.key === '$add' && change.new.some(role => newMember.roles.cache.has(role.id))) ||
+       entry.changes.some(change => change.key === 'roles')) &&
+      isWhitelisted(newMember.guild, entry.executor)
+    ) {
+      return;
+    }
+
     try {
       await newMember.roles.set(oldMember.roles.cache.map(r => r.id));
       const logChannel = newMember.guild.channels.cache.find(
