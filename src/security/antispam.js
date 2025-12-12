@@ -1,15 +1,15 @@
 const { Collection } = require("discord.js");
 
 module.exports = (client) => {
-  const messageCache = new Collection(); // userId => [timestamps of non-reply messages]
-  const mentionCache = new Collection(); // userId => rolling mention count (non-reply only)
+  const messageCache = new Collection();
+  const mentionCache = new Collection();
 
-  const MAX_MESSAGES = 5;    // non-reply messages in 10 sec
-  const MAX_MENTIONS = 8;    // non-reply mentions in 10 sec
-  const WINDOW = 10_000;     // 10 seconds
-  const TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+  const MAX_MESSAGES = 5;
+  const MAX_MENTIONS = 8;
+  const WINDOW = 10_000;
+  const TIMEOUT_MS = 10 * 60 * 1000;
+  const EXTRA_WHITELIST_ID = "1400281740978815118";
 
-  // Clean caches every 10 seconds
   setInterval(() => {
     const now = Date.now();
     for (const [userId, timestamps] of messageCache.entries()) {
@@ -24,14 +24,12 @@ module.exports = (client) => {
 
   client.on("messageCreate", async (message) => {
     if (!message.guild || !message.content || message.author.bot) return;
-
-    // Skip if it's a reply — those shouldn’t count as spammy
     if (message.reference) return;
+    if (message.author.id === message.guild.ownerId || message.author.id === EXTRA_WHITELIST_ID) return;
 
     const userId = message.author.id;
     const now = Date.now();
 
-    // === Message flood (non-reply only) ===
     if (!messageCache.has(userId)) messageCache.set(userId, []);
     messageCache.get(userId).push(now);
 
@@ -41,18 +39,15 @@ module.exports = (client) => {
       return;
     }
 
-    // === Mention flood (non-reply only) ===
     const totalMentions = message.mentions.users.size + message.mentions.roles.size;
     if (totalMentions > 0) {
-      // Only track if not a reply (already ensured above)
       const currentMentions = mentionCache.get(userId) || 0;
       const newCount = currentMentions + totalMentions;
       mentionCache.set(userId, newCount);
 
-      // Reset after window implicitly via interval + threshold check
       if (newCount > MAX_MENTIONS) {
         await purgeAndPunish(message, "Excessive mentions in a short time");
-        mentionCache.set(userId, 0); // reset to prevent repeated triggers
+        mentionCache.set(userId, 0);
         return;
       }
     }
