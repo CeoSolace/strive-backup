@@ -15,6 +15,13 @@ module.exports = {
     enabled: true,
   },
 
+  AUTOMOD: {  // ← ADD THIS BLOCK
+    name: "AutoMod",
+    image: "https://icons.iconarchive.com/icons/papirus-team/papirus-status/128/security-high-icon.png",
+    emoji: "🛡️",
+    enabled: config.AUTOMOD?.ENABLED ?? true,
+  },
+
   ECONOMY: {
     name: "Economy",
     image: "https://icons.iconarchive.com/icons/custom-icon-design/pretty-office-11/128/coins-icon.png",
