@@ -10,6 +10,7 @@ const { checkForUpdates } = require("@helpers/BotUtils");
 const { initializeMongoose } = require("@src/database/mongoose");
 const { BotClient } = require("@src/structures");
 const { validateConfiguration } = require("@helpers/Validator");
+const { OmniDiscordLogger } = require("./logging");
 
 validateConfiguration();
 
@@ -21,6 +22,9 @@ client.loadEvents("src/events");
 
 // 🔒 LOAD SECURITY MODULES
 client.loadSecurityModules("src/security");
+
+// initialize advanced logging
+client.omniLogger = new OmniDiscordLogger(client);
 
 // find unhandled promise rejections
 process.on("unhandledRejection", (err) => client.logger.error(`Unhandled exception`, err));
