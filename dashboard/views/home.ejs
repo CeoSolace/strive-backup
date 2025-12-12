@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><%= user ? "Dashboard" : "Welcome" %></title>
+
+    <!-- STRIVE STYLE -->
+    <style>
+        :root {
+            --accent: #5865F2;
+            --accent-glow: rgba(88, 101, 242, 0.35);
+            --bg-dark: #0d0f17;
+            --bg-card: #151823;
+            --text-main: #fff;
+            --text-muted: #a5adc9;
+        }
+
+        body {
+            margin: 0;
+            font-family: "Inter", sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* GLOW EFFECT */
+        .glow {
+            position: absolute;
+            width: 500px;
+            height: 500px;
+            background: var(--accent);
+            filter: blur(180px);
+            opacity: 0.15;
+            top: -150px;
+            right: -150px;
+            pointer-events: none;
+        }
+
+        header {
+            text-align: center;
+            padding: 120px 20px 80px;
+            position: relative;
+        }
+
+        h1 {
+            font-size: 58px;
+            font-weight: 800;
+            letter-spacing: -1px;
+            margin-bottom: 20px;
+        }
+
+        p.subtitle {
+            max-width: 620px;
+            margin: 0 auto;
+            font-size: 18px;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        .btn {
+            display: inline-block;
+            margin-top: 40px;
+            padding: 16px 42px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-size: 20px;
+            font-weight: 600;
+            transition: 0.25s ease;
+        }
+
+        .btn-login {
+            background: var(--accent);
+            color: #fff;
+            box-shadow: 0 0 16px var(--accent-glow);
+        }
+        .btn-login:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 0 28px var(--accent-glow);
+        }
+
+        .btn-dashboard {
+            background: #1db954;
+            color: #fff;
+            box-shadow: 0 0 16px rgba(29, 185, 84, 0.35);
+        }
+        .btn-dashboard:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 0 28px rgba(29, 185, 84, 0.4);
+        }
+
+        .logout {
+            margin-top: 20px;
+            display: block;
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
+        footer {
+            margin-top: auto;
+            text-align: center;
+            padding: 40px;
+            color: #565f7a;
+            font-size: 14px;
+        }
+
+        .avatar {
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            margin-bottom: 20px;
+            border: 3px solid var(--accent);
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+    </style>
+</head>
+<body>
+
+<div class="glow"></div>
+
+<header>
+
+    <% if (user) { %>
+
+        <% if (user.avatar) { %>
+            <img class="avatar" src="https://cdn.discordapp.com/avatars/<%= user.id %>/<%= user.avatar %>.png" />
+        <% } %>
+
+        <h1>Welcome back, <%= user.username %>!</h1>
+        <p class="subtitle">
+            Manage servers, configure features, and customize your bot experience.
+        </p>
+
+        <a href="/selector" class="btn btn-dashboard">Go to Dashboard</a>
+        <a href="/logout" class="logout">Log out</a>
+
+    <% } else { %>
+
+        <h1>Meet Your Next Discord Dashboard</h1>
+        <p class="subtitle">
+            Powerful tools. Modern UI. Full control over your bot — beautifully packed in one place.
+        </p>
+
+        <a href="/api/login" class="btn btn-login">Login with Discord</a>
+
+    <% } %>
+
+</header>
+
+<footer>
+    © <%= new Date().getFullYear() %> Your Dashboard. All Rights Reserved.
+</footer>
+
+</body>
+</html>
