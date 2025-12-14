@@ -3,14 +3,10 @@ module.exports = {
   aliases: ["ann"],
   description: "Send a global announcement to all servers",
   usage: ",announce <message>",
-  category: "Owner", // MUST match folder name
+  category: "owner", // 🔥 MUST MATCH CATEGORY KEY
   ownerOnly: true,
 
   async execute(client, message, args) {
-    // Ensure message exists
-    if (!message || !message.guild) return;
-
-    // Ensure content
     if (!args.length) {
       return message.reply("❌ Please provide an announcement message.");
     }
@@ -20,10 +16,8 @@ module.exports = {
     let sent = 0;
     let failed = 0;
 
-    // Iterate all guilds
     for (const guild of client.guilds.cache.values()) {
       try {
-        // Prefer system channel, fallback to first available text channel
         const channel =
           guild.systemChannel ||
           guild.channels.cache.find(
@@ -39,19 +33,15 @@ module.exports = {
           continue;
         }
 
-        await channel.send(
-          `📢 **GLOBAL ANNOUNCEMENT**\n\n${announcement}`
-        );
-
+        await channel.send(`📢 **GLOBAL ANNOUNCEMENT**\n\n${announcement}`);
         sent++;
-      } catch (err) {
+      } catch {
         failed++;
       }
     }
 
-    // Confirmation to command sender
     return message.reply(
-      `✅ **Announcement Completed**\n\n📨 Sent: **${sent}**\n❌ Failed: **${failed}**`
+      `✅ Announcement completed\n\n📨 Sent: **${sent}**\n❌ Failed: **${failed}**`
     );
   },
 };
