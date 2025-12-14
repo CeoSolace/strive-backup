@@ -16,24 +16,28 @@ validateConfiguration();
 
 // initialize client
 const client = new BotClient();
+
+// load core systems
 client.loadCommands("src/commands");
 client.loadContexts("src/contexts");
 client.loadEvents("src/events");
 
-// 🔒 LOAD SECURITY MODULES
+// 🔒 load security modules
 client.loadSecurityModules("src/security");
 
 // initialize advanced logging
 client.omniLogger = new OmniDiscordLogger(client);
 
-// find unhandled promise rejections
-process.on("unhandledRejection", (err) => client.logger.error(`Unhandled exception`, err));
+// handle unhandled promise rejections
+process.on("unhandledRejection", (err) =>
+  client.logger.error("Unhandled promise rejection", err)
+);
 
 (async () => {
-  // check for updates
+  // check for bot updates
   await checkForUpdates();
 
-  // start the dashboard if enabled
+  // launch dashboard if enabled
   if (client.config.DASHBOARD.enabled) {
     client.logger.log("Launching dashboard");
     try {
@@ -43,7 +47,7 @@ process.on("unhandledRejection", (err) => client.logger.error(`Unhandled excepti
       client.logger.error("Failed to launch dashboard", ex);
     }
   } else {
-    // only init DB if dashboard is off (dashboard handles it otherwise)
+    // initialize DB only if dashboard is disabled
     await initializeMongoose();
   }
 
