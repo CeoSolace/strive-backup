@@ -15,7 +15,7 @@ module.exports = {
     enabled: true,
   },
 
-  AUTOMOD: {  // ← ADD THIS BLOCK
+  AUTOMOD: {
     name: "AutoMod",
     image: "https://icons.iconarchive.com/icons/papirus-team/papirus-status/128/security-high-icon.png",
     emoji: "🛡️",
