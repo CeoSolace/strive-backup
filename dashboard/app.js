@@ -13,7 +13,8 @@ module.exports.launch = async (client) => {
   const mainRouter = require("./routes/index"),
     discordAPIRouter = require("./routes/discord"),
     logoutRouter = require("./routes/logout"),
-    guildManagerRouter = require("./routes/guild-manager");
+    guildManagerRouter = require("./routes/guild-manager"),
+    newsRouter = require("./routes/news"); // ✅ NEW
 
   client.states = {};
   client.config = config;
@@ -50,13 +51,21 @@ module.exports.launch = async (client) => {
     .use(async (req, res, next) => {
       req.user = req.session.user;
       req.client = client;
-      if (req.user && req.url !== "/")
-        req.userInfos = await utils.fetchUser(req.user, req.client);
+
+      if (req.user && req.url !== "/") {
+        try {
+          req.userInfos = await utils.fetchUser(req.user, req.client);
+        } catch (e) {
+          req.userInfos = null;
+        }
+      }
+
       next();
     })
     .use("/api", discordAPIRouter)
     .use("/logout", logoutRouter)
     .use("/manage", guildManagerRouter)
+    .use("/news", newsRouter) // ✅ NEW route
     .use("/", mainRouter)
     .use(CheckAuth, (req, res) => {
       res.status(404).render("404", {
