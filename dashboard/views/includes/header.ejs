@@ -1,18 +1,24 @@
 <header class="main-header">
   <style>
-    /* Dark header override */
+    /* ===== SAFE DARK MODE OVERRIDES (NO LAYOUT CHANGES) ===== */
+
+    /* Logo area */
     .main-header .logo {
-      background: #0f141b !important;
+      background-color: #0f141b !important;
       color: #e6edf3 !important;
-      border-bottom: 1px solid rgba(255,255,255,0.08) !important;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
     }
-    .main-header .logo:hover { background:#111a24 !important; }
+    .main-header .logo:hover {
+      background-color: #121a25 !important;
+    }
 
+    /* Navbar */
     .main-header .navbar {
-      background: #0b0f14 !important;
-      border-bottom: 1px solid rgba(255,255,255,0.08) !important;
+      background-color: #0b0f14 !important;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
     }
 
+    /* Navbar links + toggle */
     .main-header .navbar .nav > li > a,
     .main-header .navbar .sidebar-toggle {
       color: #e6edf3 !important;
@@ -24,50 +30,24 @@
       color: #ffffff !important;
     }
 
-    .main-header .logo-mini,
-    .main-header .logo-lg {
-      color: #e6edf3 !important;
-    }
-
-    .main-header .user-menu > a {
-      display: flex !important;
-      align-items: center !important;
-      gap: 10px !important;
-    }
-
-    .main-header .user-menu .user-image {
-      width: 28px !important;
-      height: 28px !important;
-      border-radius: 999px !important;
-      object-fit: cover !important;
-      border: 1px solid rgba(255,255,255,0.12) !important;
-    }
-
-    /* Dropdown dark mode */
+    /* User dropdown */
     .main-header .dropdown-menu {
       background: #0f141b !important;
-      border: 1px solid rgba(255,255,255,0.10) !important;
-      box-shadow: 0 18px 40px rgba(0,0,0,0.45) !important;
+      border: 1px solid rgba(255,255,255,0.1);
     }
 
-    .main-header .dropdown-menu li a {
+    .main-header .dropdown-menu a {
       color: #e6edf3 !important;
     }
 
-    .main-header .dropdown-menu li a:hover {
+    .main-header .dropdown-menu a:hover {
       background: rgba(255,255,255,0.06) !important;
-      color: #ffffff !important;
     }
 
-    /* Sign out button styling */
-    .main-header .user-footer .btn {
-      background: rgba(255,255,255,0.06) !important;
-      border: 1px solid rgba(255,255,255,0.10) !important;
-      color: #e6edf3 !important;
-    }
-    .main-header .user-footer .btn:hover {
-      background: rgba(255,255,255,0.10) !important;
-      color: #ffffff !important;
+    /* User image */
+    .main-header .user-image {
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.15);
     }
   </style>
 
@@ -77,32 +57,28 @@
     <span class="logo-lg"><b>Strive Dash</b></span>
   </a>
 
+  <!-- Header Navbar -->
   <nav class="navbar navbar-static-top" role="navigation">
-    <!-- Sidebar toggle button -->
-    <a class="sidebar-toggle" data-toggle="push-menu" role="button" aria-label="Toggle sidebar">
+    <!-- Sidebar toggle -->
+    <a class="sidebar-toggle" data-toggle="push-menu" role="button">
       <span class="sr-only">Toggle navigation</span>
-      <i class="fa fa-bars" aria-hidden="true"></i>
     </a>
 
     <div class="navbar-custom-menu">
       <ul class="nav navbar-nav">
         <li class="dropdown user user-menu">
-          <a href="#" class="dropdown-toggle" data-toggle="dropdown" aria-expanded="false">
+          <a href="#" class="dropdown-toggle" data-toggle="dropdown">
             <img
               src="<%= (user && user.displayAvatar) ? user.displayAvatar : 'https://cdn.discordapp.com/embed/avatars/0.png' %>"
               class="user-image"
               alt="User Image"
             />
-            <span class="hidden-xs">
-              <%= (user && user.tag) ? user.tag : "Guest" %>
-            </span>
+            <span class="hidden-xs"><%= (user && user.tag) ? user.tag : "Guest" %></span>
           </a>
 
           <ul class="dropdown-menu">
-            <li class="user-footer" style="min-width:auto !important;">
-              <div>
-                <a href="/logout" class="btn btn-default btn-flat btn-block">Sign out</a>
-              </div>
+            <li class="user-footer">
+              <a href="/logout" class="btn btn-default btn-flat btn-block">Sign out</a>
             </li>
           </ul>
         </li>
