@@ -2,36 +2,284 @@
 <%- include("includes/header") %>
 <%- include("includes/sidebar") %>
 
-<main class="content">
-  <div class="container">
-    <h1>News / Patch Notes</h1>
-    <p class="muted">Latest updates and changes.</p>
+<style>
+  /* Page theme */
+  .news-wrap {
+    min-height: calc(100vh - 120px);
+    padding: 28px 22px;
+    background: #0b0f14;
+    color: #e6edf3;
+  }
 
-    <div class="cards">
-      <% if (!patchNotes || !patchNotes.length) { %>
-        <div class="card">
-          <h3>No patch notes yet</h3>
-          <p>Add entries to your patch notes data file.</p>
-        </div>
-      <% } else { %>
+  .news-container {
+    max-width: 980px;
+    margin: 0 auto;
+  }
+
+  .news-title {
+    font-size: 34px;
+    font-weight: 800;
+    margin: 0 0 6px 0;
+    letter-spacing: -0.02em;
+  }
+
+  .news-subtitle {
+    margin: 0 0 18px 0;
+    color: #9aa4b2;
+    font-size: 14px;
+  }
+
+  .news-topbar {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    justify-content: space-between;
+    margin: 18px 0 18px;
+    flex-wrap: wrap;
+  }
+
+  .news-search {
+    flex: 1;
+    min-width: 220px;
+    max-width: 420px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.04);
+    color: #e6edf3;
+    outline: none;
+  }
+  .news-search::placeholder { color: #7c8796; }
+
+  .news-meta {
+    color: #9aa4b2;
+    font-size: 12px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  /* Cards */
+  .notes-grid {
+    display: grid;
+    gap: 14px;
+  }
+
+  .note-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 16px 16px 14px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+  }
+
+  .note-head {
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+
+  .note-date {
+    font-size: 12px;
+    color: #9aa4b2;
+  }
+
+  .note-version {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.10);
+    background: rgba(255,255,255,0.04);
+    color: #cbd5e1;
+  }
+
+  .note-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+
+  .note-desc {
+    margin: 6px 0 0;
+    color: #b6c2cf;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  /* Sections */
+  .sections {
+    display: grid;
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .sec {
+    background: rgba(0,0,0,0.18);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px;
+    padding: 12px;
+  }
+
+  .sec-title {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+    color: #cbd5e1;
+  }
+
+  .badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.10);
+    background: rgba(255,255,255,0.05);
+  }
+
+  .badge.added { border-color: rgba(72, 255, 160, 0.22); color: #7fffb4; }
+  .badge.changed { border-color: rgba(77, 163, 255, 0.22); color: #86c6ff; }
+  .badge.fixed { border-color: rgba(255, 199, 77, 0.22); color: #ffd27a; }
+  .badge.security { border-color: rgba(255, 77, 77, 0.22); color: #ff9a9a; }
+
+  .sec ul {
+    margin: 0;
+    padding-left: 18px;
+    color: #d7dee7;
+  }
+
+  .sec li { margin: 6px 0; line-height: 1.4; }
+
+  /* Empty state */
+  .empty {
+    padding: 16px;
+    border-radius: 16px;
+    border: 1px dashed rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.02);
+    color: #9aa4b2;
+  }
+</style>
+
+<div class="news-wrap">
+  <div class="news-container">
+    <h1 class="news-title">News / Patch Notes</h1>
+    <p class="news-subtitle">Latest updates, fixes, and changes to Strive.</p>
+
+    <div class="news-topbar">
+      <input id="pnSearch" class="news-search" placeholder="Search patch notes (title, items, version, date)..." />
+      <div class="news-meta">
+        <span>Total: <strong id="pnCount"><%= (patchNotes && patchNotes.length) ? patchNotes.length : 0 %></strong></span>
+        <span>•</span>
+        <span>Updated: <strong><%= (patchNotes && patchNotes[0] && patchNotes[0].date) ? patchNotes[0].date : "N/A" %></strong></span>
+      </div>
+    </div>
+
+    <% if (!patchNotes || !patchNotes.length) { %>
+      <div class="empty">
+        <strong>No patch notes yet.</strong><br/>
+        Add entries to <code>dashboard/data/patchNotes.json</code>.
+      </div>
+    <% } else { %>
+      <div class="notes-grid" id="pnGrid">
         <% patchNotes.forEach(note => { %>
-          <div class="card">
-            <div class="muted"><%= note.date %></div>
-            <h3><%= note.title %></h3>
-            <% if (note.items && note.items.length) { %>
-              <ul>
-                <% note.items.forEach(i => { %>
-                  <li><%= i %></li>
-                <% }) %>
-              </ul>
-            <% } else if (note.body) { %>
-              <p><%= note.body %></p>
-            <% } %>
+          <div class="note-card" data-search="<%= JSON.stringify(note).toLowerCase().replace(/"/g,'&quot;') %>">
+            <div class="note-head">
+              <div>
+                <div class="note-date"><%= note.date || "Unknown date" %></div>
+                <h3 class="note-title"><%= note.title || "Untitled update" %></h3>
+                <% if (note.summary) { %>
+                  <p class="note-desc"><%= note.summary %></p>
+                <% } %>
+              </div>
+              <% if (note.version) { %>
+                <div class="note-version">v<%= note.version %></div>
+              <% } %>
+            </div>
+
+            <div class="sections">
+              <% if (note.added && note.added.length) { %>
+                <div class="sec">
+                  <div class="sec-title"><span class="badge added">Added</span></div>
+                  <ul>
+                    <% note.added.forEach(i => { %><li><%= i %></li><% }) %>
+                  </ul>
+                </div>
+              <% } %>
+
+              <% if (note.changed && note.changed.length) { %>
+                <div class="sec">
+                  <div class="sec-title"><span class="badge changed">Changed</span></div>
+                  <ul>
+                    <% note.changed.forEach(i => { %><li><%= i %></li><% }) %>
+                  </ul>
+                </div>
+              <% } %>
+
+              <% if (note.fixed && note.fixed.length) { %>
+                <div class="sec">
+                  <div class="sec-title"><span class="badge fixed">Fixed</span></div>
+                  <ul>
+                    <% note.fixed.forEach(i => { %><li><%= i %></li><% }) %>
+                  </ul>
+                </div>
+              <% } %>
+
+              <% if (note.security && note.security.length) { %>
+                <div class="sec">
+                  <div class="sec-title"><span class="badge security">Security</span></div>
+                  <ul>
+                    <% note.security.forEach(i => { %><li><%= i %></li><% }) %>
+                  </ul>
+                </div>
+              <% } %>
+
+              <% if ((!note.added || !note.added.length) && (!note.changed || !note.changed.length) && (!note.fixed || !note.fixed.length) && (!note.security || !note.security.length) && note.items && note.items.length) { %>
+                <div class="sec">
+                  <div class="sec-title"><span class="badge">Notes</span></div>
+                  <ul>
+                    <% note.items.forEach(i => { %><li><%= i %></li><% }) %>
+                  </ul>
+                </div>
+              <% } %>
+            </div>
           </div>
         <% }) %>
-      <% } %>
-    </div>
+      </div>
+    <% } %>
   </div>
-</main>
+</div>
+
+<script>
+  // client-side search filter (no backend needed)
+  (function () {
+    const input = document.getElementById("pnSearch");
+    const grid = document.getElementById("pnGrid");
+    const count = document.getElementById("pnCount");
+    if (!input || !grid) return;
+
+    function apply() {
+      const q = (input.value || "").trim().toLowerCase();
+      let shown = 0;
+
+      Array.from(grid.children).forEach(card => {
+        const hay = card.getAttribute("data-search") || "";
+        const ok = !q || hay.includes(q);
+        card.style.display = ok ? "" : "none";
+        if (ok) shown++;
+      });
+
+      if (count) count.textContent = String(shown);
+    }
+
+    input.addEventListener("input", apply);
+  })();
+</script>
 
 <%- include("includes/footer") %>
