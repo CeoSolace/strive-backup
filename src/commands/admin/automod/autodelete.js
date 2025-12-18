@@ -1,116 +1,102 @@
 const { ApplicationCommandOptionType } = require("discord.js");
 
-/**
- * @type {import("@structures/Command")}
- */
+function parseToggle(input) {
+  if (typeof input !== "string") return null;
+  const v = input.trim().toLowerCase();
+  if (["on", "true", "enable", "enabled", "yes"].includes(v)) return true;
+  if (["off", "false", "disable", "disabled", "no"].includes(v)) return false;
+  return null;
+}
+
+function ensureAutomodDefaults(settings) {
+  settings.automod ??= {};
+  const a = settings.automod;
+  a.anti_attachments ??= false;
+  a.anti_invites ??= false;
+  a.anti_links ??= false;
+  a.max_lines ??= 0; // 0 disabled
+}
+
 module.exports = {
   name: "autodelete",
   description: "manage the autodelete settings for the server",
   category: "AUTOMOD",
   userPermissions: ["ManageGuild"],
+
   command: {
     enabled: true,
     minArgsCount: 2,
     subcommands: [
-      {
-        trigger: "attachments <on|off>",
-        description: "allow or disallow attachments in message",
-      },
-      {
-        trigger: "invites <on|off>",
-        description: "allow or disallow invites in message",
-      },
-      {
-        trigger: "links <on|off>",
-        description: "allow or disallow links in message",
-      },
-      {
-        trigger: "maxlines <number>",
-        description: "sets maximum lines allowed per message [0 to disable]",
-      },
+      { trigger: "attachments <on|off>", description: "delete messages with attachments" },
+      { trigger: "invites <on|off>", description: "delete messages with discord invites" },
+      { trigger: "links <on|off>", description: "delete messages with links" },
+      { trigger: "maxlines <number>", description: "max lines allowed per message (0 disables)" },
     ],
   },
+
   slashCommand: {
     enabled: true,
     ephemeral: true,
     options: [
       {
         name: "attachments",
-        description: "allow or disallow attachments in message",
+        description: "delete messages with attachments",
         type: ApplicationCommandOptionType.Subcommand,
         options: [
           {
             name: "status",
-            description: "configuration status",
+            description: "ON/OFF",
             required: true,
             type: ApplicationCommandOptionType.String,
             choices: [
-              {
-                name: "ON",
-                value: "ON",
-              },
-              {
-                name: "OFF",
-                value: "OFF",
-              },
+              { name: "ON", value: "ON" },
+              { name: "OFF", value: "OFF" },
             ],
           },
         ],
       },
       {
         name: "invites",
-        description: "allow or disallow discord invites in message",
+        description: "delete messages with discord invites",
         type: ApplicationCommandOptionType.Subcommand,
         options: [
           {
             name: "status",
-            description: "configuration status",
+            description: "ON/OFF",
             required: true,
             type: ApplicationCommandOptionType.String,
             choices: [
-              {
-                name: "ON",
-                value: "ON",
-              },
-              {
-                name: "OFF",
-                value: "OFF",
-              },
+              { name: "ON", value: "ON" },
+              { name: "OFF", value: "OFF" },
             ],
           },
         ],
       },
       {
         name: "links",
-        description: "allow or disallow links in message",
+        description: "delete messages with links",
         type: ApplicationCommandOptionType.Subcommand,
         options: [
           {
             name: "status",
-            description: "configuration status",
+            description: "ON/OFF",
             required: true,
             type: ApplicationCommandOptionType.String,
             choices: [
-              {
-                name: "ON",
-                value: "ON",
-              },
-              {
-                name: "OFF",
-                value: "OFF",
-              },
+              { name: "ON", value: "ON" },
+              { name: "OFF", value: "OFF" },
             ],
           },
         ],
       },
       {
         name: "maxlines",
-        description: "sets maximum lines allowed per message",
+        description: "set max lines allowed (0 disables)",
         type: ApplicationCommandOptionType.Subcommand,
         options: [
           {
             name: "amount",
-            description: "configuration amount (0 to disable)",
+            description: "0-50 (0 disables)",
             required: true,
             type: ApplicationCommandOptionType.Integer,
           },
@@ -121,93 +107,112 @@ module.exports = {
 
   async messageRun(message, args, data) {
     const settings = data.settings;
-    const sub = args[0].toLowerCase();
-    let response;
+    ensureAutomodDefaults(settings);
 
-    if (sub == "attachments") {
-      const status = args[1].toLowerCase();
-      if (!["on", "off"].includes(status)) return message.safeReply("Invalid status. Value must be `on/off`");
-      response = await antiAttachments(settings, status);
+    const sub = (args[0] || "").toLowerCase();
+
+    if (sub === "attachments") {
+      const t = parseToggle(args[1]);
+      if (t === null) return message.safeReply("Invalid status. Value must be `on/off`.");
+      settings.automod.anti_attachments = t;
+      await settings.save();
+      return message.safeReply(
+        t ? "Messages **with attachments** will now be automatically deleted."
+          : "Messages will **not** be filtered for attachments now."
+      );
     }
 
-    //
-    else if (sub === "invites") {
-      const status = args[1].toLowerCase();
-      if (!["on", "off"].includes(status)) return message.safeReply("Invalid status. Value must be `on/off`");
-      response = await antiInvites(settings, status);
+    if (sub === "invites") {
+      const t = parseToggle(args[1]);
+      if (t === null) return message.safeReply("Invalid status. Value must be `on/off`.");
+      settings.automod.anti_invites = t;
+      await settings.save();
+      return message.safeReply(
+        t ? "Messages **with Discord invites** will now be automatically deleted."
+          : "Messages will **not** be filtered for Discord invites now."
+      );
     }
 
-    //
-    else if (sub == "links") {
-      const status = args[1].toLowerCase();
-      if (!["on", "off"].includes(status)) return message.safeReply("Invalid status. Value must be `on/off`");
-      response = await antilinks(settings, status);
+    if (sub === "links") {
+      const t = parseToggle(args[1]);
+      if (t === null) return message.safeReply("Invalid status. Value must be `on/off`.");
+      settings.automod.anti_links = t;
+      await settings.save();
+      return message.safeReply(
+        t ? "Messages **with links** will now be automatically deleted."
+          : "Messages will **not** be filtered for links now."
+      );
     }
 
-    //
-    else if (sub === "maxlines") {
-      const max = args[1];
-      if (isNaN(max) || Number.parseInt(max) < 1) {
-        return message.safeReply("Max Lines must be a valid number greater than 0");
-      }
-      response = await maxLines(settings, max);
+    if (sub === "maxlines") {
+      const lines = Number(args[1]);
+      if (!Number.isInteger(lines) || lines < 0 || lines > 50)
+        return message.safeReply("Max lines must be an integer between 0 and 50 (0 disables).");
+
+      settings.automod.max_lines = lines;
+      await settings.save();
+
+      return message.safeReply(
+        lines === 0
+          ? "Maximum line limit is **disabled**."
+          : `Messages longer than **${lines}** lines will now be automatically deleted.`
+      );
     }
 
-    //
-    else response = "Invalid command usage!";
-    await message.safeReply(response);
+    return message.safeReply("Invalid command usage!");
   },
 
   async interactionRun(interaction, data) {
-    const sub = interaction.options.getSubcommand();
     const settings = data.settings;
-    let response;
+    ensureAutomodDefaults(settings);
 
-    if (sub == "attachments") {
-      response = await antiAttachments(settings, interaction.options.getString("status"));
-    } else if (sub === "invites") response = await antiInvites(settings, interaction.options.getString("status"));
-    else if (sub == "links") response = await antilinks(settings, interaction.options.getString("status"));
-    else if (sub === "maxlines") response = await maxLines(settings, interaction.options.getInteger("amount"));
-    else response = "Invalid command usage!";
+    const sub = interaction.options.getSubcommand();
 
-    await interaction.followUp(response);
+    if (sub === "attachments") {
+      const t = parseToggle(interaction.options.getString("status"));
+      settings.automod.anti_attachments = !!t;
+      await settings.save();
+      return interaction.followUp(
+        t ? "Messages **with attachments** will now be automatically deleted."
+          : "Messages will **not** be filtered for attachments now."
+      );
+    }
+
+    if (sub === "invites") {
+      const t = parseToggle(interaction.options.getString("status"));
+      settings.automod.anti_invites = !!t;
+      await settings.save();
+      return interaction.followUp(
+        t ? "Messages **with Discord invites** will now be automatically deleted."
+          : "Messages will **not** be filtered for Discord invites now."
+      );
+    }
+
+    if (sub === "links") {
+      const t = parseToggle(interaction.options.getString("status"));
+      settings.automod.anti_links = !!t;
+      await settings.save();
+      return interaction.followUp(
+        t ? "Messages **with links** will now be automatically deleted."
+          : "Messages will **not** be filtered for links now."
+      );
+    }
+
+    if (sub === "maxlines") {
+      const lines = interaction.options.getInteger("amount");
+      if (!Number.isInteger(lines) || lines < 0 || lines > 50)
+        return interaction.followUp("Max lines must be an integer between 0 and 50 (0 disables).");
+
+      settings.automod.max_lines = lines;
+      await settings.save();
+
+      return interaction.followUp(
+        lines === 0
+          ? "Maximum line limit is **disabled**."
+          : `Messages longer than **${lines}** lines will now be automatically deleted.`
+      );
+    }
+
+    return interaction.followUp("Invalid command usage!");
   },
 };
-
-async function antiAttachments(settings, input) {
-  const status = input.toUpperCase() === "ON" ? true : false;
-  settings.automod.anti_attachments = status;
-  await settings.save();
-  return `Messages ${
-    status ? "with attachments will now be automatically deleted" : "will not be filtered for attachments now"
-  }`;
-}
-
-async function antiInvites(settings, input) {
-  const status = input.toUpperCase() === "ON" ? true : false;
-  settings.automod.anti_invites = status;
-  await settings.save();
-  return `Messages ${
-    status ? "with discord invites will now be automatically deleted" : "will not be filtered for discord invites now"
-  }`;
-}
-
-async function antilinks(settings, input) {
-  const status = input.toUpperCase() === "ON" ? true : false;
-  settings.automod.anti_links = status;
-  await settings.save();
-  return `Messages ${status ? "with links will now be automatically deleted" : "will not be filtered for links now"}`;
-}
-
-async function maxLines(settings, input) {
-  const lines = Number.parseInt(input);
-  if (isNaN(lines)) return "Please enter a valid number input";
-
-  settings.automod.max_lines = lines;
-  await settings.save();
-  return `${
-    input === 0
-      ? "Maximum line limit is disabled"
-      : `Messages longer than \`${input}\` lines will now be automatically deleted`
-  }`;
-}
