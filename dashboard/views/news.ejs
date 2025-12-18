@@ -1,0 +1,37 @@
+<%- include("includes/head") %>
+<%- include("includes/header") %>
+<%- include("includes/sidebar") %>
+
+<main class="content">
+  <div class="container">
+    <h1>News / Patch Notes</h1>
+    <p class="muted">Latest updates and changes.</p>
+
+    <div class="cards">
+      <% if (!patchNotes || !patchNotes.length) { %>
+        <div class="card">
+          <h3>No patch notes yet</h3>
+          <p>Add entries to your patch notes data file.</p>
+        </div>
+      <% } else { %>
+        <% patchNotes.forEach(note => { %>
+          <div class="card">
+            <div class="muted"><%= note.date %></div>
+            <h3><%= note.title %></h3>
+            <% if (note.items && note.items.length) { %>
+              <ul>
+                <% note.items.forEach(i => { %>
+                  <li><%= i %></li>
+                <% }) %>
+              </ul>
+            <% } else if (note.body) { %>
+              <p><%= note.body %></p>
+            <% } %>
+          </div>
+        <% }) %>
+      <% } %>
+    </div>
+  </div>
+</main>
+
+<%- include("includes/footer") %>
