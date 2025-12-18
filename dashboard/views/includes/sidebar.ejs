@@ -1,61 +1,124 @@
 <!-- Left side column. contains the logo and sidebar -->
-<aside class="main-sidebar">
-    <section class="sidebar">
-        <!-- Sidebar user panel -->
-        <div class="user-panel" style="padding: 15px; display: flex; align-items: center; border-bottom: 1px solid #2a2a2a; margin-bottom: 16px;">
-            <div class="pull-left image" style="margin-right: 12px;">
-                <img src="<%= user.displayAvatar %>" class="img-circle" alt="User Image" style="width: 40px; height: 40px; border: 2px solid #333;">
-            </div>
-            <div class="pull-left info" style="color: #f0f0f0; font-weight: 500;">
-                <p style="margin: 0; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;">
-                    <%= user.username %>
-                </p>
-            </div>
-        </div>
+<aside class="main-sidebar" style="background:#111;">
+  <section class="sidebar" style="position:relative; min-height:100vh; padding-bottom:60px;">
 
-        <!-- Dashboard branding -->
-        <div style="padding: 8px 10px; text-align: center; color: #bbb; font-size: 13px; margin: 0 0 16px 0; border-bottom: 1px solid #2a2a2a;">
-            <strong>Strive Dashboard</strong><br>
-            <span style="font-size: 12px;">Made by <span style="color: #4caf50;">ceosolace</span></span>
-        </div>
+    <!-- User panel -->
+    <div class="user-panel"
+      style="padding:15px; display:flex; align-items:center; gap:12px; border-bottom:1px solid #2a2a2a; margin-bottom:14px;">
+      <div class="image">
+        <img
+          src="<%= (user && user.displayAvatar) ? user.displayAvatar : 'https://cdn.discordapp.com/embed/avatars/0.png' %>"
+          class="img-circle"
+          alt="User Image"
+          style="width:42px; height:42px; border:2px solid #333; object-fit:cover;"
+        />
+      </div>
+      <div class="info" style="color:#f0f0f0; font-weight:600; min-width:0;">
+        <p style="margin:0; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:170px;">
+          <%= (user && user.username) ? user.username : "Guest" %>
+        </p>
+        <p style="margin:2px 0 0; font-size:11px; color:#9aa0a6; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:170px;">
+          <%= (locals.guild && guild && guild.name) ? guild.name : "No guild selected" %>
+        </p>
+      </div>
+    </div>
 
-        <!-- Servers section -->
-        <ul class="sidebar-menu" data-widget="tree">
-            <li class="header" style="color: #aaa; font-size: 11px; padding-left: 12px;">SERVERS MANAGEMENT</li>
-            <li>
-                <a href="/selector" style="padding-left: 15px;">
-                    <i class="fa fa-home"></i> <span>Selector</span>
-                </a>
-            </li>
-        </ul>
+    <!-- Branding -->
+    <div
+      style="padding:10px 10px 12px; text-align:center; color:#bbb; font-size:13px; margin:0 0 14px 0; border-bottom:1px solid #2a2a2a;">
+      <strong style="color:#e6e6e6;">Strive Dashboard</strong><br>
+      <span style="font-size:12px;">Made by <span style="color:#4caf50;">ceosolace</span></span>
+    </div>
 
-        <% if (locals.guild) { %>
-        <ul class="sidebar-menu" data-widget="tree" style="margin-top: 12px;">
-            <li class="header" style="color: #aaa; font-size: 11px; padding-left: 12px;">CONFIGURATION</li>
-            <li>
-                <a href="/manage/<%= guild.id %>/basic" style="padding-left: 15px;">
-                    <i class="fa fa-gear"></i> <span>Basic</span>
-                </a>
-            </li>
-            <li>
-                <a href="/manage/<%= guild.id %>/greeting" style="padding-left: 15px;">
-                    <i class="fa fa-bullhorn"></i> <span>Greeting</span>
-                </a>
-            </li>
-        </ul>
-        <% } %>
+    <!-- GENERAL -->
+    <ul class="sidebar-menu" data-widget="tree" style="margin:0;">
+      <li class="header" style="color:#aaa; font-size:11px; padding-left:12px;">GENERAL</li>
 
-        <!-- Bottom footer -->
-        <div style="position: absolute; bottom: 10px; left: 0; right: 0; text-align: center; color: #666; font-size: 11px; padding: 0 10px;">
-            © 2025 Strive — ceosolace
-        </div>
-    </section>
+      <li>
+        <a href="/news" style="padding-left:15px;">
+          <i class="fa fa-newspaper-o"></i> <span>News / Patch Notes</span>
+        </a>
+      </li>
+    </ul>
+
+    <!-- SERVERS MANAGEMENT -->
+    <ul class="sidebar-menu" data-widget="tree" style="margin-top:12px;">
+      <li class="header" style="color:#aaa; font-size:11px; padding-left:12px;">SERVERS MANAGEMENT</li>
+
+      <li>
+        <a href="/selector" style="padding-left:15px;">
+          <i class="fa fa-home"></i> <span>Selector</span>
+        </a>
+      </li>
+    </ul>
+
+    <% if (locals.guild && guild) { %>
+      <!-- CONFIGURATION -->
+      <ul class="sidebar-menu" data-widget="tree" style="margin-top:12px;">
+        <li class="header" style="color:#aaa; font-size:11px; padding-left:12px;">CONFIGURATION</li>
+
+        <li>
+          <a href="/manage/<%= guild.id %>/basic" style="padding-left:15px;">
+            <i class="fa fa-gear"></i> <span>Basic</span>
+          </a>
+        </li>
+
+        <li>
+          <a href="/manage/<%= guild.id %>/greeting" style="padding-left:15px;">
+            <i class="fa fa-bullhorn"></i> <span>Greeting</span>
+          </a>
+        </li>
+      </ul>
+    <% } %>
+
+    <!-- Bottom footer -->
+    <div style="position:absolute; bottom:12px; left:0; right:0; text-align:center; color:#666; font-size:11px; padding:0 10px;">
+      © 2025 Strive — ceosolace
+    </div>
+  </section>
 </aside>
 
 <script>
-    $(document).ready(function() {
-        let pathname = window.location.pathname;
-        $('.sidebar-menu li').removeClass('active');
-        $('.sidebar-menu a[href="' + pathname + '"]').closest('li').addClass('active');
+  // Robust active state:
+  // - exact match (e.g., /news)
+  // - prefix match for nested routes (e.g., /manage/:id/basic)
+  (function () {
+    function normalize(path) {
+      if (!path) return "/";
+      // remove trailing slash except root
+      if (path.length > 1 && path.endsWith("/")) return path.slice(0, -1);
+      return path;
+    }
+
+    var pathname = normalize(window.location.pathname);
+
+    // Clear existing
+    $('.sidebar-menu li').removeClass('active');
+
+    // Find best matching link (longest href that matches start of pathname)
+    var best = null;
+    var bestLen = -1;
+
+    $('.sidebar-menu a[href]').each(function () {
+      var href = $(this).attr('href');
+      if (!href) return;
+
+      href = normalize(href);
+
+      // Ignore anchors and external
+      if (href.startsWith("#")) return;
+      if (href.startsWith("http")) return;
+
+      // exact or prefix match
+      var isMatch = (pathname === href) || (pathname.startsWith(href + "/")) || (href !== "/" && pathname.startsWith(href));
+      if (isMatch && href.length > bestLen) {
+        best = $(this);
+        bestLen = href.length;
+      }
     });
+
+    if (best) {
+      best.closest('li').addClass('active');
+    }
+  })();
 </script>
