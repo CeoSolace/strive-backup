@@ -1,11 +1,58 @@
 [
   {
     "date": "2025-12-18",
+    "version": "1.4.0",
     "title": "Dashboard + Automod improvements",
-    "items": [
-      "Added News / Patch Notes page",
-      "Improved automod configuration and stability",
-      "Added /automod guide"
+    "summary": "Big stability pass across automod commands and the dashboard experience.",
+    "added": [
+      "News / Patch Notes dashboard page",
+      "Search bar to filter patch notes instantly",
+      "Automod guide command: /automod guide"
+    ],
+    "changed": [
+      "Unified automod setting keys to prevent mismatch issues",
+      "Improved command validation for toggles and thresholds",
+      "Cleaner dashboard routing for new pages"
+    ],
+    "fixed": [
+      "Max lines now correctly supports 0 = disabled",
+      "Mass mention threshold handling is consistent across slash + prefix commands",
+      "Reduced random crashes when settings fields are missing"
+    ],
+    "security": [
+      "Hardened session usage and safer fallbacks when user info fetch fails"
+    ]
+  },
+  {
+    "date": "2025-12-12",
+    "version": "1.3.2",
+    "title": "Moderation & UI polish",
+    "summary": "Quality-of-life improvements for staff and cleaner UI behavior.",
+    "added": [
+      "Better active highlighting in the sidebar (nested routes supported)",
+      "Improved empty states and error handling on pages"
+    ],
+    "changed": [
+      "Sidebar now safely renders even if guild/user data is missing",
+      "Refined spacing and typography for dashboard pages"
+    ],
+    "fixed": [
+      "Minor layout issues on large screens",
+      "Occasional broken sidebar active state on /manage/* routes"
+    ]
+  },
+  {
+    "date": "2025-12-05",
+    "version": "1.3.0",
+    "title": "Initial dashboard cleanup",
+    "summary": "Stability and structure improvements to make future features easier.",
+    "added": [
+      "More consistent view structure with shared includes",
+      "Better router separation for dashboard features"
+    ],
+    "fixed": [
+      "Unreliable navigation behavior in some routes",
+      "Multiple small rendering issues caused by missing locals"
     ]
   }
 ]
