@@ -101,7 +101,6 @@ async function parseTicketDetails(channel) {
 }
 
 function getCustomId(btn) {
-  // v14 stores it as custom_id internally
   return btn?.data?.custom_id || btn?.data?.customId || null;
 }
 
@@ -227,7 +226,6 @@ async function handleTicketClaim(interaction) {
   const member = await guild.members.fetch(user.id).catch(() => null);
   if (!member) return interaction.editReply("Could not verify your permissions.");
 
-  // nobody can claim their own ticket (admins included)
   if (openerId === user.id) {
     return interaction.editReply("You can’t claim your own ticket.");
   }
@@ -235,33 +233,26 @@ async function handleTicketClaim(interaction) {
   const isAdmin = member.permissions.has(PermissionFlagsBits.Administrator);
   const hasManageChannels = member.permissions.has(PermissionFlagsBits.ManageChannels);
 
-  // category staff roles from settings
   const settings = await getSettings(guild);
   const picked = (settings.ticket.categories || []).find((c) => c.name === catName);
   const staffRoles = picked?.staff_roles || [];
   const hasStaffRole = staffRoles.some((rid) => member.roles.cache.has(rid));
 
-  // Admins are staff for all tickets; otherwise must be ManageChannels or staff role
   if (!isAdmin && !hasManageChannels && !hasStaffRole) {
     return interaction.editReply("You can't claim this ticket.");
   }
 
-  // already claimed? (we define: not starting with ticket-/tіcket- anymore)
   const isUnclaimed = channel.name.startsWith("ticket-") || channel.name.startsWith("tіcket-");
   if (!isUnclaimed) return interaction.editReply("This ticket is already claimed.");
 
   const staffSlug = toChannelSlug(user.username);
-
-  // expected: ticket-<userslug>-<num> (but tolerate variations)
-  const parts = channel.name.split("-");
   const num = getTicketNumberFromName(channel.name) || "0";
-  const userPart = parts.length >= 3 ? parts.slice(1, -1).join("-") : "user";
+  const userPart = channel.name.split("-").length >= 3 ? channel.name.split("-").slice(1, -1).join("-") : "user";
   const newName = `${staffSlug}-${userPart}-${num}`.slice(0, 100);
 
   try {
     await channel.setName(newName);
 
-    // Disable claim button on the original ticket message
     const newComponents = (message.components || []).map((row) => {
       const newRow = ActionRowBuilder.from(row);
       newRow.components = newRow.components.map((c) => {
@@ -304,12 +295,9 @@ async function handleTicketOpen(interaction) {
   if (alreadyExists) return interaction.followUp("You already have an open ticket");
 
   const settings = await getSettings(guild);
-
-  // limit check
   const openCount = getTicketChannels(guild).size;
   if (openCount > settings.ticket.limit) return interaction.followUp("There are too many open tickets. Try again later");
 
-  // pick ticket category (type)
   let catName = null;
   let catPerms = [];
   let parentCategoryId = null;
@@ -330,25 +318,19 @@ async function handleTicketOpen(interaction) {
     const res = await interaction.channel
       .awaitMessageComponent({
         componentType: ComponentType.StringSelect,
-        time: 60 * 1000,
+        time: 60_000,
       })
-      .catch((err) => {
-        if (err.message?.includes("time")) return;
-      });
+      .catch(() => null);
 
     if (!res) return interaction.editReply({ content: "Timed out. Try again", components: [] });
 
-    // IMPORTANT: acknowledge the select interaction
     await res.deferUpdate().catch(() => {});
-
-    // remove the menu
     await interaction.editReply({ content: "Processing...", components: [] });
 
     catName = res.values[0];
     const picked = categories.find((cat) => cat.name === catName);
-
     catPerms = picked?.staff_roles || [];
-    parentCategoryId = picked?.parent_category || null; // Discord Category Channel ID per ticketcat
+    parentCategoryId = picked?.parent_category || null;
   }
 
   try {
@@ -364,19 +346,20 @@ async function handleTicketOpen(interaction) {
     if (catPerms?.length > 0) {
       catPerms.forEach((roleId) => {
         const role = guild.roles.cache.get(roleId);
-        if (!role) return;
-        permissionOverwrites.push({
-          id: role.id,
-          allow: ["ViewChannel", "SendMessages", "ReadMessageHistory"],
-        });
+        if (role) {
+          permissionOverwrites.push({
+            id: role.id,
+            allow: ["ViewChannel", "SendMessages", "ReadMessageHistory"],
+          });
+        }
       });
     }
 
     const tktChannel = await guild.channels.create({
-      name: `ticket-${userSlug}-${ticketNumber}`, // ticket-user-number
+      name: `ticket-${userSlug}-${ticketNumber}`,
       type: ChannelType.GuildText,
-      parent: parentCategoryId || null, // put tickets in the category channel assigned to the ticketcat
-      topic: `ticket|${user.id}|${catName || "Default"}`, // ASCII-safe topic prefix
+      parent: parentCategoryId || null,
+      topic: `ticket|${user.id}|${catName || "Default"}`,
       permissionOverwrites,
     });
 
@@ -389,7 +372,6 @@ ${catName ? `\n**Category:** ${catName}` : ""}`
       )
       .setFooter({ text: "You may close your ticket anytime by clicking the button below" });
 
-    // Close + Claim buttons
     const buttonsRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setLabel("Close Ticket")
@@ -405,7 +387,6 @@ ${catName ? `\n**Category:** ${catName}` : ""}`
       components: [buttonsRow],
     });
 
-    // DM user
     const dmEmbed = new EmbedBuilder()
       .setColor(TICKET.CREATE_EMBED)
       .setAuthor({ name: "Ticket Created" })
@@ -418,7 +399,6 @@ ${catName ? `\n**Category:** ${catName}` : ""}`
 
     user.send({ embeds: [dmEmbed], components: [row] }).catch(() => {});
 
-    // user asked: show #channel so they can jump straight to it
     await interaction.editReply(`Ticket created! 🔥 Go to <#${tktChannel.id}>`);
   } catch (ex) {
     error("handleTicketOpen", ex);
