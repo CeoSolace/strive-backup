@@ -266,11 +266,12 @@ module.exports = {
 };
 
 /**
- * @param {import('discord.js').Message} param0
+ * @param {import('discord.js').Message | import('discord.js').CommandInteraction} context
  * @param {import('discord.js').GuildTextBasedChannel} targetChannel
  * @param {object} settings
  */
-async function ticketModalSetup({ guild, channel, member }, targetChannel, settings) {
+async function ticketModalSetup(context, targetChannel, settings) {
+  const { guild, channel, member } = context;
   const buttonRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId("ticket_btnSetup").setLabel("Setup Message").setStyle(ButtonStyle.Primary)
   );
@@ -288,7 +289,7 @@ async function ticketModalSetup({ guild, channel, member }, targetChannel, setti
       filter: (i) => i.customId === "ticket_btnSetup" && i.member.id === member.id && i.message.id === sentMsg.id,
       time: 20000,
     })
-    .catch((ex) => {});
+    .catch(() => {});
 
   if (!btnInteraction) return sentMsg.edit({ content: "No response received, cancelling setup", components: [] });
 
@@ -326,10 +327,10 @@ async function ticketModalSetup({ guild, channel, member }, targetChannel, setti
   // receive modal input
   const modal = await btnInteraction
     .awaitModalSubmit({
-      time: 1 * 60 * 1000,
+      time: 60000,
       filter: (m) => m.customId === "ticket-modalSetup" && m.member.id === member.id && m.message.id === sentMsg.id,
     })
-    .catch((ex) => {});
+    .catch(() => {});
 
   if (!modal) return sentMsg.edit({ content: "No response received, cancelling setup", components: [] });
 
@@ -355,7 +356,7 @@ async function ticketModalSetup({ guild, channel, member }, targetChannel, setti
 }
 
 async function setupLogChannel(target, settings) {
-  if (!target.canSendEmbeds()) return `Oops! I do have have permission to send embed to ${target}`;
+  if (!target.canSendEmbeds()) return `Oops! I do not have permission to send embeds to ${target}`;
 
   settings.ticket.log_channel = target.id;
   await settings.save();
@@ -372,46 +373,43 @@ async function setupLimit(limit, settings) {
   return `Configuration saved. You can now have a maximum of \`${limit}\` open tickets`;
 }
 
-async function close({ channel }, author) {
-  if (!isTicketChannel(channel)) return "This command can only be used in ticket channels";
-  const status = await closeTicket(channel, author, "Closed by a moderator");
+async function close(context, author) {
+  if (!isTicketChannel(context.channel)) return "This command can only be used in ticket channels";
+  const status = await closeTicket(context.channel, author, "Closed by a moderator");
   if (status === "MISSING_PERMISSIONS") return "I do not have permission to close tickets";
   if (status === "ERROR") return "An error occurred while closing the ticket";
   return null;
 }
 
-async function closeAll({ guild }, user) {
-  const stats = await closeAllTickets(guild, user);
+async function closeAll(context, user) {
+  const stats = await closeAllTickets(context.guild, user);
   return `Completed! Success: \`${stats[0]}\` Failed: \`${stats[1]}\``;
 }
 
-async function addToTicket({ channel }, inputId) {
-  if (!isTicketChannel(channel)) return "This command can only be used in ticket channel";
-  if (!inputId || isNaN(inputId)) return "Oops! You need to input a valid userId/roleId";
+async function addToTicket(context, inputId) {
+  if (!isTicketChannel(context.channel)) return "This command can only be used in ticket channel";
+  if (!inputId || !/^\d+$/.test(inputId)) return "Provide a valid user/role ID";
 
   try {
-    await channel.permissionOverwrites.create(inputId, {
+    await context.channel.permissionOverwrites.create(inputId, {
       ViewChannel: true,
       SendMessages: true,
+      ReadMessageHistory: true
     });
-
     return "Done";
   } catch (ex) {
-    return "Failed to add user/role. Did you provide a valid ID?";
+    return "Failed to add user/role. Valid ID?";
   }
 }
 
-async function removeFromTicket({ channel }, inputId) {
-  if (!isTicketChannel(channel)) return "This command can only be used in ticket channel";
-  if (!inputId || isNaN(inputId)) return "Oops! You need to input a valid userId/roleId";
+async function removeFromTicket(context, inputId) {
+  if (!isTicketChannel(context.channel)) return "This command can only be used in ticket channel";
+  if (!inputId || !/^\d+$/.test(inputId)) return "Provide a valid user/role ID";
 
   try {
-    channel.permissionOverwrites.create(inputId, {
-      ViewChannel: false,
-      SendMessages: false,
-    });
+    await context.channel.permissionOverwrites.delete(inputId);
     return "Done";
   } catch (ex) {
-    return "Failed to remove user/role. Did you provide a valid ID?";
+    return "Failed to remove user/role. Valid ID?";
   }
 }
