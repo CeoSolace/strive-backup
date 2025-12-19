@@ -1,9 +1,6 @@
 const { ApplicationCommandOptionType, EmbedBuilder, ChannelType } = require("discord.js");
 const { getSettings, saveSettings } = require("@schemas/Guild");
 
-/**
- * @type {import("@structures/Command")}
- */
 module.exports = {
   name: "ticketcat",
   description: "manage ticket categories",
@@ -13,18 +10,9 @@ module.exports = {
     enabled: true,
     minArgsCount: 1,
     subcommands: [
-      {
-        trigger: "list",
-        description: "list all ticket categories",
-      },
-      {
-        trigger: "add <category> | <staff_roles>",
-        description: "add a ticket category",
-      },
-      {
-        trigger: "remove <category>",
-        description: "remove a ticket category",
-      },
+      { trigger: "list", description: "list all ticket categories" },
+      { trigger: "add <category> | <staff_roles>", description: "add a ticket category" },
+      { trigger: "remove <category>", description: "remove a ticket category" },
     ],
   },
   slashCommand: {
@@ -49,7 +37,7 @@ module.exports = {
           },
           {
             name: "staff_roles",
-            description: "the staff roles",
+            description: "comma-separated role IDs",
             type: ApplicationCommandOptionType.String,
             required: false,
           },
@@ -119,31 +107,34 @@ function listCategories(data) {
 
   const fields = categories.map(category => ({
     name: category.name,
-    value: `**Staff:** ${category.staff_roles.map(r => `<@&${r}>`).join(", ") || "None"}\n**Category ID:** \`${category.parent_category || "None"}\``
+    value: `**Staff Roles:** ${category.staff_roles.map(r => `<@&${r}>`).join(", ") || "None"}`
   }));
 
   return {
-    embeds: [new EmbedBuilder().setAuthor({ name: "Ticket Categories" }).addFields(fields)]
+    embeds: [new EmbedBuilder()
+      .setAuthor({ name: "Ticket Categories" })
+      .addFields(fields)
+    ]
   };
 }
 
 async function addCategory(guild, data, categoryName, staff_roles) {
-  if (!categoryName) return "Invalid usage! Missing category name.";
+  if (!categoryName) return "Category name required.";
   if (data.settings.ticket.categories.find(c => c.name === categoryName)) {
     return `Category \`${categoryName}\` already exists.`;
   }
 
-  // Create Discord category channel
+  // Create dedicated category channel
   let parentCategoryId = null;
   try {
-    const categoryChannel = await guild.channels.create({
+    const catChannel = await guild.channels.create({
       name: `🎟️・${categoryName}`,
       type: ChannelType.GuildCategory,
       permissionOverwrites: [
         { id: guild.roles.everyone.id, deny: ["ViewChannel"] }
       ]
     });
-    parentCategoryId = categoryChannel.id;
+    parentCategoryId = catChannel.id;
   } catch (ex) {
     return "Failed to create category channel. Ensure bot has Manage Channels permission.";
   }
@@ -158,17 +149,14 @@ async function addCategory(guild, data, categoryName, staff_roles) {
   });
   await data.settings.save();
 
-  return `Category \`${categoryName}\` added with dedicated channel category.`;
+  return `✅ Category \`${categoryName}\` created with dedicated channel category.`;
 }
 
 async function removeCategory(guild, data, categoryName) {
-  const categories = data.settings.ticket.categories;
-  const category = categories.find(c => c.name === categoryName);
-  if (!category) {
-    return `Category \`${categoryName}\` does not exist.`;
-  }
+  const category = data.settings.ticket.categories.find(c => c.name === categoryName);
+  if (!category) return `Category \`${categoryName}\` not found.`;
 
-  // Delete Discord category channel if exists
+  // Delete Discord category channel
   if (category.parent_category) {
     const channel = guild.channels.cache.get(category.parent_category);
     if (channel?.type === ChannelType.GuildCategory) {
@@ -176,8 +164,8 @@ async function removeCategory(guild, data, categoryName) {
     }
   }
 
-  data.settings.ticket.categories = categories.filter(c => c.name !== categoryName);
+  data.settings.ticket.categories = data.settings.ticket.categories.filter(c => c.name !== categoryName);
   await data.settings.save();
 
-  return `Category \`${categoryName}\` removed.`;
+  return `✅ Category \`${categoryName}\` removed.`;
 }
