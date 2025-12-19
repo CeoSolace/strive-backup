@@ -1,4 +1,5 @@
-const { ApplicationCommandOptionType, EmbedBuilder } = require("discord.js");
+const { ApplicationCommandOptionType, EmbedBuilder, ChannelType } = require("discord.js");
+const { getSettings, saveSettings } = require("@schemas/Guild");
 
 /**
  * @type {import("@structures/Command")}
@@ -74,27 +75,17 @@ module.exports = {
     const sub = args[0].toLowerCase();
     let response;
 
-    // list
     if (sub === "list") {
       response = listCategories(data);
-    }
-
-    // add
-    else if (sub === "add") {
+    } else if (sub === "add") {
       const split = args.slice(1).join(" ").split("|");
       const category = split[0].trim();
       const staff_roles = split[1]?.trim();
       response = await addCategory(message.guild, data, category, staff_roles);
-    }
-
-    // remove
-    else if (sub === "remove") {
+    } else if (sub === "remove") {
       const category = args.slice(1).join(" ").trim();
-      response = await removeCategory(data, category);
-    }
-
-    // invalid subcommand
-    else {
+      response = await removeCategory(message.guild, data, category);
+    } else {
       response = "Invalid subcommand.";
     }
 
@@ -105,68 +96,88 @@ module.exports = {
     const sub = interaction.options.getSubcommand();
     let response;
 
-    // list
     if (sub === "list") {
       response = listCategories(data);
-    }
-
-    // add
-    else if (sub === "add") {
+    } else if (sub === "add") {
       const category = interaction.options.getString("category");
       const staff_roles = interaction.options.getString("staff_roles");
       response = await addCategory(interaction.guild, data, category, staff_roles);
-    }
-
-    // remove
-    else if (sub === "remove") {
+    } else if (sub === "remove") {
       const category = interaction.options.getString("category");
-      response = await removeCategory(data, category);
+      response = await removeCategory(interaction.guild, data, category);
+    } else {
+      response = "Invalid subcommand";
     }
 
-    //
-    else response = "Invalid subcommand";
     await interaction.followUp(response);
   },
 };
 
 function listCategories(data) {
   const categories = data.settings.ticket.categories;
-  if (categories?.length === 0) return "No ticket categories found.";
+  if (!categories?.length) return "No ticket categories found.";
 
-  const fields = [];
-  for (const category of categories) {
-    const roleNames = category.staff_roles.map((r) => `<@&${r}>`).join(", ");
-    fields.push({ name: category.name, value: `**Staff:** ${roleNames || "None"}` });
-  }
-  const embed = new EmbedBuilder().setAuthor({ name: "Ticket Categories" }).addFields(fields);
-  return { embeds: [embed] };
+  const fields = categories.map(category => ({
+    name: category.name,
+    value: `**Staff:** ${category.staff_roles.map(r => `<@&${r}>`).join(", ") || "None"}\n**Category ID:** \`${category.parent_category || "None"}\``
+  }));
+
+  return {
+    embeds: [new EmbedBuilder().setAuthor({ name: "Ticket Categories" }).addFields(fields)]
+  };
 }
 
-async function addCategory(guild, data, category, staff_roles) {
-  if (!category) return "Invalid usage! Missing category name.";
-
-  // check if category already exists
-  if (data.settings.ticket.categories.find((c) => c.name === category)) {
-    return `Category \`${category}\` already exists.`;
+async function addCategory(guild, data, categoryName, staff_roles) {
+  if (!categoryName) return "Invalid usage! Missing category name.";
+  if (data.settings.ticket.categories.find(c => c.name === categoryName)) {
+    return `Category \`${categoryName}\` already exists.`;
   }
 
-  const staffRoles = (staff_roles?.split(",")?.map((r) => r.trim()) || []).filter((r) => guild.roles.cache.has(r));
+  // Create Discord category channel
+  let parentCategoryId = null;
+  try {
+    const categoryChannel = await guild.channels.create({
+      name: `🎟️・${categoryName}`,
+      type: ChannelType.GuildCategory,
+      permissionOverwrites: [
+        { id: guild.roles.everyone.id, deny: ["ViewChannel"] }
+      ]
+    });
+    parentCategoryId = categoryChannel.id;
+  } catch (ex) {
+    return "Failed to create category channel. Ensure bot has Manage Channels permission.";
+  }
 
-  data.settings.ticket.categories.push({ name: category, staff_roles: staffRoles });
+  const staffRoles = (staff_roles?.split(",").map(r => r.trim()).filter(r => /^\d+$/.test(r)) || [])
+    .filter(roleId => guild.roles.cache.has(roleId));
+
+  data.settings.ticket.categories.push({
+    name: categoryName,
+    staff_roles: staffRoles,
+    parent_category: parentCategoryId
+  });
   await data.settings.save();
 
-  return `Category \`${category}\` added.`;
+  return `Category \`${categoryName}\` added with dedicated channel category.`;
 }
 
-async function removeCategory(data, category) {
+async function removeCategory(guild, data, categoryName) {
   const categories = data.settings.ticket.categories;
-  // check if category exists
-  if (!categories.find((c) => c.name === category)) {
-    return `Category \`${category}\` does not exist.`;
+  const category = categories.find(c => c.name === categoryName);
+  if (!category) {
+    return `Category \`${categoryName}\` does not exist.`;
   }
 
-  data.settings.ticket.categories = categories.filter((c) => c.name !== category);
+  // Delete Discord category channel if exists
+  if (category.parent_category) {
+    const channel = guild.channels.cache.get(category.parent_category);
+    if (channel?.type === ChannelType.GuildCategory) {
+      await channel.delete().catch(() => {});
+    }
+  }
+
+  data.settings.ticket.categories = categories.filter(c => c.name !== categoryName);
   await data.settings.save();
 
-  return `Category \`${category}\` removed.`;
+  return `Category \`${categoryName}\` removed.`;
 }
