@@ -9,20 +9,13 @@ const {
   PermissionFlagsBits,
 } = require("discord.js");
 const { TICKET } = require("@root/config.js");
-
-// schemas
 const { getSettings } = require("@schemas/Guild");
-
-// helpers
 const { postToBin } = require("@helpers/HttpUtils");
 const { error } = require("@helpers/Logger");
 
 const OPEN_PERMS = ["ManageChannels"];
 const CLOSE_PERMS = ["ManageChannels", "ReadMessageHistory"];
 
-/**
- * Utils
- */
 function toChannelSlug(str) {
   return (str || "user")
     .toLowerCase()
@@ -37,13 +30,6 @@ function getTicketNumberFromName(name) {
   return m ? m[1] : null;
 }
 
-/**
- * IMPORTANT:
- * - Do NOT depend on channel.name, because claim renames it.
- * - Topic is the reliable identifier.
- * - Backwards compatible with old "tіcket|" prefix (non-ascii i).
- * @param {import('discord.js').Channel} channel
- */
 function isTicketChannel(channel) {
   return (
     channel?.type === ChannelType.GuildText &&
@@ -52,45 +38,27 @@ function isTicketChannel(channel) {
   );
 }
 
-/**
- * @param {import('discord.js').Guild} guild
- */
 function getTicketChannels(guild) {
   return guild.channels.cache.filter((ch) => isTicketChannel(ch));
 }
 
-/**
- * Ticket number generator:
- * scans ALL ticket channels (open + claimed) and returns max+1.
- * This stays correct even if tickets are deleted or renamed on claim.
- * @param {import('discord.js').Guild} guild
- */
 function getNextTicketNumber(guild) {
   const chans = getTicketChannels(guild);
   let max = 0;
-
   for (const ch of chans.values()) {
     const nStr = getTicketNumberFromName(ch.name);
     if (!nStr) continue;
     const n = parseInt(nStr, 10);
     if (!Number.isNaN(n) && n > max) max = n;
   }
-
   return String(max + 1);
 }
 
-/**
- * @param {import('discord.js').Guild} guild
- * @param {string} userId
- */
 function getExistingTicketChannel(guild, userId) {
   const tktChannels = getTicketChannels(guild);
   return tktChannels.filter((ch) => ch.topic.split("|")[1] === userId).first();
 }
 
-/**
- * @param {import('discord.js').BaseGuildTextChannel} channel
- */
 async function parseTicketDetails(channel) {
   if (!channel.topic) return;
   const split = channel.topic.split("|");
@@ -104,11 +72,6 @@ function getCustomId(btn) {
   return btn?.data?.custom_id || btn?.data?.customId || null;
 }
 
-/**
- * @param {import('discord.js').BaseGuildTextChannel} channel
- * @param {import('discord.js').User} closedBy
- * @param {string} [reason]
- */
 async function closeTicket(channel, closedBy, reason) {
   if (!channel.deletable || !channel.permissionsFor(channel.guild.members.me).has(CLOSE_PERMS)) {
     return "MISSING_PERMISSIONS";
@@ -160,13 +123,11 @@ async function closeTicket(channel, closedBy, reason) {
 
     embed.setFields(fields);
 
-    // send embed to log channel
     if (config.ticket.log_channel) {
       const logChannel = channel.guild.channels.cache.get(config.ticket.log_channel);
       logChannel?.safeSend?.({ embeds: [embed], components });
     }
 
-    // send embed to user
     if (ticketDetails?.user) {
       const dmEmbed = embed
         .setDescription(`**Server:** ${channel.guild.name}\n**Category:** ${ticketDetails.catName}`)
@@ -181,10 +142,6 @@ async function closeTicket(channel, closedBy, reason) {
   }
 }
 
-/**
- * @param {import('discord.js').Guild} guild
- * @param {import('discord.js').User} author
- */
 async function closeAllTickets(guild, author) {
   const channels = getTicketChannels(guild);
   let success = 0;
@@ -199,19 +156,6 @@ async function closeAllTickets(guild, author) {
   return [success, failed];
 }
 
-/**
- * CLAIM RULES (as requested):
- * - Anyone with ADMINISTRATOR is staff for ALL tickets,
- *   BUT admins cannot claim their own ticket.
- * - Non-admin staff can claim if:
- *   - they have ManageChannels OR
- *   - they have a staff role for that ticket's category (settings.ticket.categories[].staff_roles)
- * - No one can claim their own ticket.
- * - Claim renames channel by replacing "ticket" with staff username:
- *     ticket-user-12 -> staffname-user-12
- *
- * @param {import("discord.js").ButtonInteraction} interaction
- */
 async function handleTicketClaim(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
@@ -224,7 +168,7 @@ async function handleTicketClaim(interaction) {
   const catName = split[2] || "Default";
 
   const member = await guild.members.fetch(user.id).catch(() => null);
-  if (!member) return interaction.editReply("Could not verify your permissions.");
+  if (!member) return interaction.editReply("Could not verify permissions.");
 
   if (openerId === user.id) {
     return interaction.editReply("You can’t claim your own ticket.");
@@ -274,21 +218,16 @@ async function handleTicketClaim(interaction) {
     return interaction.editReply(`Ticket claimed! Go to <#${channel.id}>`);
   } catch (ex) {
     error("handleTicketClaim", ex);
-    return interaction.editReply("Failed to claim ticket (likely missing channel rename permissions).");
+    return interaction.editReply("Failed to claim ticket (missing permissions).");
   }
 }
 
-/**
- * @param {import("discord.js").ButtonInteraction} interaction
- */
 async function handleTicketOpen(interaction) {
   await interaction.deferReply({ ephemeral: true });
   const { guild, user } = interaction;
 
   if (!guild.members.me.permissions.has(OPEN_PERMS)) {
-    return interaction.followUp(
-      "Cannot create ticket channel, missing `Manage Channel` permission. Contact server manager for help!"
-    );
+    return interaction.followUp("Missing `Manage Channels` permission. Contact server admin!");
   }
 
   const alreadyExists = getExistingTicketChannel(guild, user.id);
@@ -296,7 +235,7 @@ async function handleTicketOpen(interaction) {
 
   const settings = await getSettings(guild);
   const openCount = getTicketChannels(guild).size;
-  if (openCount > settings.ticket.limit) return interaction.followUp("There are too many open tickets. Try again later");
+  if (openCount > settings.ticket.limit) return interaction.followUp("Too many open tickets. Try later.");
 
   let catName = null;
   let catPerms = [];
@@ -304,12 +243,12 @@ async function handleTicketOpen(interaction) {
 
   const categories = settings.ticket.categories || [];
   if (categories.length > 0) {
-    const options = categories.map((cat) => ({ label: cat.name, value: cat.name }));
+    const options = categories.map(cat => ({ label: cat.name, value: cat.name }));
 
     const menuRow = new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId("ticket-menu")
-        .setPlaceholder("Choose the ticket category")
+        .setPlaceholder("Choose ticket category")
         .addOptions(options)
     );
 
@@ -328,9 +267,9 @@ async function handleTicketOpen(interaction) {
     await interaction.editReply({ content: "Processing...", components: [] });
 
     catName = res.values[0];
-    const picked = categories.find((cat) => cat.name === catName);
+    const picked = categories.find(cat => cat.name === catName);
     catPerms = picked?.staff_roles || [];
-    parentCategoryId = picked?.parent_category || null;
+    parentCategoryId = picked?.parent_category || null; // CRITICAL: Uses category's parent channel
   }
 
   try {
@@ -344,7 +283,7 @@ async function handleTicketOpen(interaction) {
     ];
 
     if (catPerms?.length > 0) {
-      catPerms.forEach((roleId) => {
+      catPerms.forEach(roleId => {
         const role = guild.roles.cache.get(roleId);
         if (role) {
           permissionOverwrites.push({
@@ -358,7 +297,7 @@ async function handleTicketOpen(interaction) {
     const tktChannel = await guild.channels.create({
       name: `ticket-${userSlug}-${ticketNumber}`,
       type: ChannelType.GuildText,
-      parent: parentCategoryId || null,
+      parent: parentCategoryId, // Places ticket in correct category
       topic: `ticket|${user.id}|${catName || "Default"}`,
       permissionOverwrites,
     });
@@ -366,11 +305,11 @@ async function handleTicketOpen(interaction) {
     const embed = new EmbedBuilder()
       .setAuthor({ name: `Ticket #${ticketNumber}` })
       .setDescription(
-        `Hello ${user.toString()}
-Support will be with you shortly
-${catName ? `\n**Category:** ${catName}` : ""}`
+        `Hello ${user.toString()}\nSupport will be with you shortly${
+          catName ? `\n\n**Category:** ${catName}` : ""
+        }`
       )
-      .setFooter({ text: "You may close your ticket anytime by clicking the button below" });
+      .setFooter({ text: "Close your ticket anytime with the button below" });
 
     const buttonsRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -378,7 +317,11 @@ ${catName ? `\n**Category:** ${catName}` : ""}`
         .setCustomId("TICKET_CLOSE")
         .setEmoji("🔒")
         .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setLabel("Claim").setCustomId("TICKET_CLAIM").setEmoji("🧑‍💼").setStyle(ButtonStyle.Success)
+      new ButtonBuilder()
+        .setLabel("Claim")
+        .setCustomId("TICKET_CLAIM")
+        .setEmoji("🧑‍💼")
+        .setStyle(ButtonStyle.Success)
     );
 
     const sent = await tktChannel.send({
@@ -391,7 +334,7 @@ ${catName ? `\n**Category:** ${catName}` : ""}`
       .setColor(TICKET.CREATE_EMBED)
       .setAuthor({ name: "Ticket Created" })
       .setThumbnail(guild.iconURL())
-      .setDescription(`**Server:** ${guild.name}\n${catName ? `**Category:** ${catName}` : ""}`);
+      .setDescription(`**Server:** ${guild.name}${catName ? `\n**Category:** ${catName}` : ""}`);
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setLabel("View Channel").setURL(sent.url).setStyle(ButtonStyle.Link)
@@ -402,20 +345,17 @@ ${catName ? `\n**Category:** ${catName}` : ""}`
     await interaction.editReply(`Ticket created! 🔥 Go to <#${tktChannel.id}>`);
   } catch (ex) {
     error("handleTicketOpen", ex);
-    return interaction.editReply("Failed to create ticket channel, an error occurred!");
+    return interaction.editReply("Failed to create ticket channel!");
   }
 }
 
-/**
- * @param {import("discord.js").ButtonInteraction} interaction
- */
 async function handleTicketClose(interaction) {
   await interaction.deferReply({ ephemeral: true });
   const status = await closeTicket(interaction.channel, interaction.user);
   if (status === "MISSING_PERMISSIONS") {
-    return interaction.followUp("Cannot close the ticket, missing permissions. Contact server manager for help!");
+    return interaction.followUp("Missing permissions to close ticket. Contact server admin!");
   } else if (status === "ERROR") {
-    return interaction.followUp("Failed to close the ticket, an error occurred!");
+    return interaction.followUp("Failed to close ticket!");
   }
 }
 
