@@ -1,5 +1,27 @@
 [
   {
+    "date": "2025-12-20",
+    "version": "1.5.0",
+    "title": "Strive Review + Anti-Nuke security rollout",
+    "summary": "New security systems to prevent nukes and require owner approval for bots with dangerous permissions.",
+    "added": [
+      "Strive Review: bots with dangerous permissions are kicked first and sent to #strive-review for owner approval",
+      "Accept/Deny review panel with buttons, including owner ping, bot details, permission list, and adder/executor info",
+      "Auto-create #strive-review channel if missing (restricted visibility)"
+    ],
+    "changed": [
+      "Bot security now evaluates dangerous permissions on join and on permission-grant events",
+      "Improved audit-log correlation to attribute bot adds / role grants more reliably"
+    ],
+    "fixed": [
+      "Strive Review now triggers correctly for bots invited with dangerous permissions at join (not only after role updates)"
+    ],
+    "security": [
+      "Hardened bot onboarding against admin-permission abuse via OAuth invites and post-join role grants",
+      "Reduced blast radius from rapid destructive actions with strengthened anti-nuke lockdown behavior"
+    ]
+  },
+  {
     "date": "2025-12-18",
     "version": "1.4.0",
     "title": "Dashboard + Automod improvements",
