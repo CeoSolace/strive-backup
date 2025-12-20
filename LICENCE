@@ -1,0 +1,68 @@
+MIT License
+
+Copyright (c) 2025 Omni Bot Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+---
+
+### Attribution & Credits
+
+This project is an original work that makes use of the following external
+libraries and ecosystems, each licensed separately under their own terms:
+
+- **discord.js**  
+  Copyright © Discord.js Contributors  
+  https://discord.js.org
+
+- **Node.js** and the broader npm open-source ecosystem
+
+This project also follows widely adopted open-source architectural and design
+patterns commonly used in Discord bot development. Such patterns are not
+subject to copyright.
+
+No proprietary or non-permissively licensed code is knowingly included.
+
+---
+
+### Telemetry & License Enforcement Notice
+
+The Software **may now or in the future include optional or conditional code**
+that collects and transmits limited technical information back to the
+maintainers **solely for purposes such as**:
+
+- License enforcement
+- Abuse detection
+- Security monitoring
+- Integrity verification
+- Diagnosing misuse or large-scale malicious deployment
+
+Such information, if collected, is intended to be **minimal, non-invasive, and
+technical in nature**, and **not intended to include personal user content**
+except where required to identify violations of this license or applicable law.
+
+By using, modifying, or distributing the Software, you acknowledge that such
+telemetry **may be present** and that removal or modification of such code may
+impact license enforcement or support.
+
+---
+
+The above copyright notice, this permission notice, and all notices under the
+sections **“Attribution & Credits”** and **“Telemetry & License Enforcement
+Notice”** shall be included in all copies or substantial portions of the
+Software.
+
+---
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
