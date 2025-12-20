@@ -3,6 +3,7 @@ const balance = require("./sub/balance");
 const deposit = require("./sub/deposit");
 const transfer = require("./sub/transfer");
 const withdraw = require("./sub/withdraw");
+const steal = require("./sub/steal");
 
 /**
  * @type {import("@structures/Command")}
@@ -16,22 +17,13 @@ module.exports = {
     enabled: true,
     minArgsCount: 1,
     subcommands: [
-      {
-        trigger: "balance",
-        description: "check your balance",
-      },
-      {
-        trigger: "deposit <coins>",
-        description: "deposit coins to your bank account",
-      },
-      {
-        trigger: "withdraw <coins>",
-        description: "withdraw coins from your bank account",
-      },
-      {
-        trigger: "transfer <user> <coins>",
-        description: "transfer coins to another user",
-      },
+      { trigger: "balance", description: "check your balance" },
+      { trigger: "deposit <coins>", description: "deposit coins to your bank account" },
+      { trigger: "withdraw <coins>", description: "withdraw coins from your bank account" },
+      { trigger: "transfer <user> <coins>", description: "transfer coins to another user" },
+
+      // ✅ NEW
+      { trigger: "steal <user>", description: "attempt to steal coins from a user's wallet" },
     ],
   },
   slashCommand: {
@@ -95,6 +87,21 @@ module.exports = {
           },
         ],
       },
+
+      // ✅ NEW
+      {
+        name: "steal",
+        description: "attempt to steal coins from a user's wallet",
+        type: ApplicationCommandOptionType.Subcommand,
+        options: [
+          {
+            name: "user",
+            description: "the user to steal from",
+            type: ApplicationCommandOptionType.User,
+            required: true,
+          },
+        ],
+      },
     ],
   },
 
@@ -107,21 +114,18 @@ module.exports = {
       response = await balance(resolved.user);
     }
 
-    //
     else if (sub === "deposit") {
       const coins = args.length && parseInt(args[1]);
       if (isNaN(coins)) return message.safeReply("Provide a valid number of coins you wish to deposit");
       response = await deposit(message.author, coins);
     }
 
-    //
     else if (sub === "withdraw") {
       const coins = args.length && parseInt(args[1]);
       if (isNaN(coins)) return message.safeReply("Provide a valid number of coins you wish to withdraw");
       response = await withdraw(message.author, coins);
     }
 
-    //
     else if (sub === "transfer") {
       if (args.length < 3) return message.safeReply("Provide a valid user and coins to transfer");
       const target = await message.guild.resolveMember(args[1], true);
@@ -131,7 +135,14 @@ module.exports = {
       response = await transfer(message.author, target.user, coins);
     }
 
-    //
+    // ✅ NEW: steal
+    else if (sub === "steal") {
+      if (args.length < 2) return message.safeReply("Provide a valid user to steal from");
+      const target = await message.guild.resolveMember(args[1], true);
+      if (!target) return message.safeReply("Provide a valid user to steal from");
+      response = await steal(message.author, target.user);
+    }
+
     else {
       return message.safeReply("Invalid command usage");
     }
@@ -143,29 +154,31 @@ module.exports = {
     const sub = interaction.options.getSubcommand();
     let response;
 
-    // balance
     if (sub === "balance") {
       const user = interaction.options.getUser("user") || interaction.user;
       response = await balance(user);
     }
 
-    // deposit
     else if (sub === "deposit") {
       const coins = interaction.options.getInteger("coins");
       response = await deposit(interaction.user, coins);
     }
 
-    // withdraw
     else if (sub === "withdraw") {
       const coins = interaction.options.getInteger("coins");
       response = await withdraw(interaction.user, coins);
     }
 
-    // transfer
     else if (sub === "transfer") {
       const user = interaction.options.getUser("user");
       const coins = interaction.options.getInteger("coins");
       response = await transfer(interaction.user, user, coins);
+    }
+
+    // ✅ NEW: steal
+    else if (sub === "steal") {
+      const user = interaction.options.getUser("user");
+      response = await steal(interaction.user, user);
     }
 
     await interaction.followUp(response);
