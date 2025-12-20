@@ -30,15 +30,25 @@
       color: #ffffff !important;
     }
 
+    /* Prevent white flash on click / focus */
+    .main-header .navbar .nav > li > a:focus,
+    .main-header .navbar .nav > li > a:active,
+    .main-header .navbar .nav > li > a:visited {
+      background: rgba(255,255,255,0.06) !important;
+      color: #ffffff !important;
+      outline: none;
+    }
+
     /* Icon spacing */
     .main-header .navbar .nav > li > a i {
       margin-right: 6px;
     }
 
-    /* User dropdown */
+    /* Dropdown menu */
     .main-header .dropdown-menu {
       background: #0f141b !important;
       border: 1px solid rgba(255,255,255,0.1);
+      padding: 8px;
     }
 
     .main-header .dropdown-menu a {
@@ -47,6 +57,23 @@
 
     .main-header .dropdown-menu a:hover {
       background: rgba(255,255,255,0.06) !important;
+    }
+
+    /* ===== LOGOUT BUTTON VISIBILITY FIX ===== */
+    .main-header .dropdown-menu .btn {
+      background-color: #1a2332 !important;
+      color: #ffffff !important;
+      border: 1px solid rgba(255,255,255,0.25);
+      font-weight: 600;
+      text-align: center;
+    }
+
+    .main-header .dropdown-menu .btn:hover,
+    .main-header .dropdown-menu .btn:focus,
+    .main-header .dropdown-menu .btn:active {
+      background-color: #243047 !important;
+      color: #ffffff !important;
+      border-color: rgba(255,255,255,0.4);
     }
 
     /* User image */
@@ -75,7 +102,7 @@
         <!-- Support Server Link -->
         <li>
           <a
-            href="https://discord.gg/kgDrVng25h"
+            href="https://discord.gg/JJMppxpf"
             target="_blank"
             rel="noopener noreferrer"
             title="Join our Support Server"
@@ -93,12 +120,14 @@
               class="user-image"
               alt="User Image"
             />
-            <span class="hidden-xs"><%= (user && user.tag) ? user.tag : "Guest" %></span>
+            <span class="hidden-xs">
+              <%= (user && user.tag) ? user.tag : "Discord User" %>
+            </span>
           </a>
 
           <ul class="dropdown-menu">
             <li class="user-footer">
-              <a href="/logout" class="btn btn-default btn-flat btn-block">
+              <a href="/logout" class="btn btn-block">
                 Sign out
               </a>
             </li>
