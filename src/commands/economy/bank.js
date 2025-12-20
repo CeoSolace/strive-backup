@@ -6,6 +6,19 @@ const withdraw = require("./sub/withdraw");
 const steal = require("./sub/steal");
 
 /**
+ * Safely respond to an interaction regardless of whether it has been replied/deferred.
+ * - If deferred: editReply
+ * - If replied: followUp
+ * - Else: reply
+ */
+async function respond(interaction, payload) {
+  // Some code may return plain strings; allow both strings and message payload objects.
+  if (interaction.deferred) return interaction.editReply(payload);
+  if (interaction.replied) return interaction.followUp(payload);
+  return interaction.reply(payload);
+}
+
+/**
  * @type {import("@structures/Command")}
  */
 module.exports = {
@@ -22,8 +35,6 @@ module.exports = {
       { trigger: "deposit <coins>", description: "deposit coins to your bank account" },
       { trigger: "withdraw <coins>", description: "withdraw coins from your bank account" },
       { trigger: "transfer <user> <coins>", description: "transfer coins to another user" },
-
-      // ✅ NEW
       { trigger: "steal <user>", description: "attempt to steal coins from a user's wallet" },
     ],
   },
@@ -89,8 +100,6 @@ module.exports = {
           },
         ],
       },
-
-      // ✅ NEW
       {
         name: "steal",
         description: "attempt to steal coins from a user's wallet",
@@ -139,7 +148,6 @@ module.exports = {
       response = await transfer(message.author, target.user, coins);
     }
 
-    // ✅ NEW: steal (wallet-only)
     else if (sub === "steal") {
       if (args.length < 2) return message.safeReply("Provide a valid user to steal from");
       const target = await message.guild.resolveMember(args[1], true);
@@ -156,6 +164,10 @@ module.exports = {
   },
 
   async interactionRun(interaction) {
+    // If your subcommands sometimes take > 3 seconds (DB lag),
+    // uncomment this to avoid "Interaction failed".
+    // await interaction.deferReply();
+
     const sub = interaction.options.getSubcommand();
     let response;
 
@@ -180,12 +192,12 @@ module.exports = {
       response = await transfer(interaction.user, user, coins);
     }
 
-    // ✅ NEW: steal (wallet-only)
     else if (sub === "steal") {
       const user = interaction.options.getUser("user");
       response = await steal(interaction.user, user);
     }
 
-    await interaction.followUp(response);
+    // ✅ FIX: safe responder (no more "not replied/deferred" errors)
+    await respond(interaction, response);
   },
 };
