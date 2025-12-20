@@ -30,6 +30,11 @@
       color: #ffffff !important;
     }
 
+    /* Icon spacing */
+    .main-header .navbar .nav > li > a i {
+      margin-right: 6px;
+    }
+
     /* User dropdown */
     .main-header .dropdown-menu {
       background: #0f141b !important;
@@ -66,6 +71,21 @@
 
     <div class="navbar-custom-menu">
       <ul class="nav navbar-nav">
+
+        <!-- Support Server Link -->
+        <li>
+          <a
+            href="https://discord.gg/JJMppxpf"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Join our Support Server"
+          >
+            <i class="fa fa-life-ring"></i>
+            <span class="hidden-xs">Support</span>
+          </a>
+        </li>
+
+        <!-- User Menu -->
         <li class="dropdown user user-menu">
           <a href="#" class="dropdown-toggle" data-toggle="dropdown">
             <img
@@ -78,10 +98,13 @@
 
           <ul class="dropdown-menu">
             <li class="user-footer">
-              <a href="/logout" class="btn btn-default btn-flat btn-block">Sign out</a>
+              <a href="/logout" class="btn btn-default btn-flat btn-block">
+                Sign out
+              </a>
             </li>
           </ul>
         </li>
+
       </ul>
     </div>
   </nav>
