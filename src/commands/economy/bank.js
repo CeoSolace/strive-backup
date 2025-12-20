@@ -13,6 +13,7 @@ module.exports = {
   description: "access to bank operations",
   category: "ECONOMY",
   botPermissions: ["EmbedLinks"],
+
   command: {
     enabled: true,
     minArgsCount: 1,
@@ -26,6 +27,7 @@ module.exports = {
       { trigger: "steal <user>", description: "attempt to steal coins from a user's wallet" },
     ],
   },
+
   slashCommand: {
     enabled: true,
     options: [
@@ -115,13 +117,13 @@ module.exports = {
     }
 
     else if (sub === "deposit") {
-      const coins = args.length && parseInt(args[1]);
+      const coins = args.length && parseInt(args[1], 10);
       if (isNaN(coins)) return message.safeReply("Provide a valid number of coins you wish to deposit");
       response = await deposit(message.author, coins);
     }
 
     else if (sub === "withdraw") {
-      const coins = args.length && parseInt(args[1]);
+      const coins = args.length && parseInt(args[1], 10);
       if (isNaN(coins)) return message.safeReply("Provide a valid number of coins you wish to withdraw");
       response = await withdraw(message.author, coins);
     }
@@ -130,16 +132,19 @@ module.exports = {
       if (args.length < 3) return message.safeReply("Provide a valid user and coins to transfer");
       const target = await message.guild.resolveMember(args[1], true);
       if (!target) return message.safeReply("Provide a valid user to transfer coins to");
-      const coins = parseInt(args[2]);
+
+      const coins = parseInt(args[2], 10);
       if (isNaN(coins)) return message.safeReply("Provide a valid number of coins you wish to transfer");
+
       response = await transfer(message.author, target.user, coins);
     }
 
-    // ✅ NEW: steal
+    // ✅ NEW: steal (wallet-only)
     else if (sub === "steal") {
       if (args.length < 2) return message.safeReply("Provide a valid user to steal from");
       const target = await message.guild.resolveMember(args[1], true);
       if (!target) return message.safeReply("Provide a valid user to steal from");
+
       response = await steal(message.author, target.user);
     }
 
@@ -175,7 +180,7 @@ module.exports = {
       response = await transfer(interaction.user, user, coins);
     }
 
-    // ✅ NEW: steal
+    // ✅ NEW: steal (wallet-only)
     else if (sub === "steal") {
       const user = interaction.options.getUser("user");
       response = await steal(interaction.user, user);
