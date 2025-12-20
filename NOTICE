@@ -1,0 +1,17 @@
+NOTICE
+
+This product includes software developed by the open-source community.
+
+Primary dependencies and acknowledgements:
+
+- discord.js
+  Copyright © Discord.js Contributors
+  https://discord.js.org
+
+- Node.js and the npm open-source ecosystem
+  https://nodejs.org
+
+This project also follows common architectural patterns used in Discord bot
+development. These patterns are non-copyrightable and widely adopted.
+
+All trademarks belong to their respective owners.
