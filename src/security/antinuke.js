@@ -1,24 +1,14 @@
 // antinuke.js (discord.js v14)
-// ✅ What this does (your exact requirements):
-// 1) If ANY BOT joins with dangerous perms (Admin / Manage Roles / Manage Channels / etc.):
-//    - BOT IS KICKED FIRST
-//    - bot creates #strive-review if it doesn't exist (private)
-//    - sends an EMBED that PINGS the server owner
-//    - embed shows: who added it, what perms triggered, why it got kicked, and how to allow/deny re-add
-//    - embed has ✅ Accept / ❌ Deny buttons
-//      • Accept: bot is ALLOWED to be re-added with those perms (won't be kicked next time)
-//      • Deny: bot is BLOCKED (any future re-add gets kicked immediately)
-// 2) This works BOTH when:
-//    - bot joins already dangerous (OAuth invite perms)
-//    - bot is later granted dangerous perms (role update)
-// 3) Anti-bot-add gate (optional but included):
-//    - Only owner can allow a user to add bots temporarily:  `-whitelist <userId>` (1 hour)
-//    - If not owner/whitelisted adds a bot => bot is kicked and logged
-// 4) Basic anti-nuke counters + scoped whitelist for human actions:
-//    - =help, =whitelist, =removewhitelist, =whitelist list
+// Strive Review ONLY (no anti-bot-add gate)
 //
-// NOTE: For #strive-review auto-create you need ManageChannels.
-// NOTE: For kicking bots you need KickMembers and role hierarchy correctly set.
+// ✅ If a bot has dangerous perms (on JOIN or later via role update):
+//    - kick first
+//    - create #strive-review if missing
+//    - send embed pinging owner with Accept / Deny buttons
+// ✅ Accept => bot is allowed to rejoin in future even with dangerous perms
+// ✅ Deny   => bot is blocked (kicked every time)
+//
+// Plus: basic anti-nuke counters (channels/roles/webhooks/bans) + optional human admin-grant revert with scoped whitelist.
 
 const {
   Collection,
@@ -36,14 +26,12 @@ module.exports = (client) => {
   // CONFIG
   // =========================
   const WINDOW = 30_000;
-  const ENTRY_MAX_AGE = 12_000; // audit logs can lag slightly
+  const ENTRY_MAX_AGE = 12_000;
 
   const EXTRA_WHITELIST_ID = "1400281740978815118";
-
   const STRIVE_REVIEW_CHANNEL_NAME = "strive-review";
-  const BOT_ADD_WHITELIST_MS = 3600_000; // 1 hour
 
-  // Bot perms that trigger review kick
+  // Bot perms that trigger Strive Review kick
   const BOT_DANGEROUS_PERMS = [
     PermissionsBitField.Flags.Administrator,
     PermissionsBitField.Flags.ManageGuild,
@@ -54,7 +42,7 @@ module.exports = (client) => {
     PermissionsBitField.Flags.KickMembers,
   ];
 
-  // Anti-nuke limits
+  // Anti-nuke limits (tweak as needed)
   const LIMITS = {
     channelDelete: 4,
     categoryDelete: 2,
@@ -73,14 +61,11 @@ module.exports = (client) => {
   // STATE
   // =========================
 
-  // Scoped whitelist (humans): guildId -> Map(userId -> Set(scopes))
+  // Scoped whitelist (for human protections only): guildId -> Map(userId -> Set(scopes))
   const whitelist = new Collection();
 
-  // Actor cache: `${guildId}:${userId}` -> counters
+  // anti-nuke actor cache: `${guildId}:${userId}` -> counters
   const actorCache = new Collection();
-
-  // Temporary anti-bot-add whitelist: guildId -> Map(userId -> expireTs)
-  const botAddWhitelist = new Collection();
 
   // Strive review:
   // pending: guildId -> Map(botId -> info)
@@ -116,18 +101,10 @@ module.exports = (client) => {
   // =========================
   setInterval(() => {
     const now = Date.now();
-
     for (const [key, data] of actorCache.entries()) {
       if (now - data.lastAction > WINDOW) actorCache.delete(key);
     }
-
-    for (const [guildId, map] of botAddWhitelist.entries()) {
-      for (const [userId, expireAt] of map.entries()) {
-        if (now > expireAt) map.delete(userId);
-      }
-      if (map.size === 0) botAddWhitelist.delete(guildId);
-    }
-  }, 300_000);
+  }, WINDOW);
 
   // =========================
   // HELPERS
@@ -211,13 +188,11 @@ module.exports = (client) => {
     try {
       const logs = await guild.fetchAuditLogs({ limit: 8, type: event });
       const now = Date.now();
-
       const entry = logs.entries.find((e) => {
         if (now - e.createdTimestamp > ENTRY_MAX_AGE) return false;
         if (!targetId) return true;
         return e.target?.id === targetId;
       });
-
       return entry?.executor ?? null;
     } catch {
       return null;
@@ -252,7 +227,6 @@ module.exports = (client) => {
   }
 
   function dangerousPermsList(member) {
-    // Human-friendly list of which dangerous perms are present
     const out = [];
     const map = [
       [PermissionsBitField.Flags.Administrator, "Administrator"],
@@ -263,20 +237,14 @@ module.exports = (client) => {
       [PermissionsBitField.Flags.BanMembers, "Ban Members"],
       [PermissionsBitField.Flags.KickMembers, "Kick Members"],
     ];
-
     for (const [flag, label] of map) {
       if (member.permissions.has(flag)) out.push(label);
     }
     return out.length ? out : ["(unknown)"];
   }
 
-  function getBotAddWhitelistMap(guildId) {
-    if (!botAddWhitelist.has(guildId)) botAddWhitelist.set(guildId, new Map());
-    return botAddWhitelist.get(guildId);
-  }
-
   async function getBotAdder(guild, botMember) {
-    // Best-effort "who added the bot"
+    // Best-effort: who added the bot
     try {
       const logs = await guild.fetchAuditLogs({ limit: 8, type: AuditLogEvent.BotAdd });
       const now = Date.now();
@@ -292,22 +260,17 @@ module.exports = (client) => {
   }
 
   async function ensureStriveReviewChannel(guild) {
-    // Try find existing
+    // find if exists
     const existing = guild.channels.cache.find(
       (c) => c.type === ChannelType.GuildText && c.name === STRIVE_REVIEW_CHANNEL_NAME
     );
 
-    if (existing && existing.permissionsFor(guild.members.me)?.has("SendMessages")) {
-      return existing;
-    }
+    if (existing && existing.permissionsFor(guild.members.me)?.has("SendMessages")) return existing;
 
-    // Try create if missing or not accessible
+    // create if missing (requires ManageChannels)
     try {
       const overwrites = [
-        {
-          id: guild.roles.everyone.id,
-          deny: [PermissionsBitField.Flags.ViewChannel],
-        },
+        { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
         {
           id: guild.ownerId,
           allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
@@ -323,7 +286,7 @@ module.exports = (client) => {
         },
       ];
 
-      // If EXTRA_WHITELIST_ID is in this guild, allow them too
+      // allow EXTRA admin to view if they exist in server
       if (guild.members.cache.has(EXTRA_WHITELIST_ID)) {
         overwrites.push({
           id: EXTRA_WHITELIST_ID,
@@ -331,14 +294,14 @@ module.exports = (client) => {
         });
       }
 
-      const channel = await guild.channels.create({
+      const ch = await guild.channels.create({
         name: STRIVE_REVIEW_CHANNEL_NAME,
         type: ChannelType.GuildText,
         reason: "Strive Review approvals channel",
         permissionOverwrites: overwrites,
       });
 
-      return channel;
+      return ch;
     } catch {
       // fallback: any writable text channel
       return guild.channels.cache.find(
@@ -363,21 +326,98 @@ module.exports = (client) => {
     return new ActionRowBuilder().addComponents(accept, deny);
   }
 
-  function helpText(prefix = "=") {
-    return (
-      `**Anti-nuke commands**\n` +
-      `• \`${prefix}help\`\n` +
-      `• \`${prefix}whitelist <@user|id>\` *(defaults to \`all\`)*\n` +
-      `• \`${prefix}whitelist <@user|id> for <scopes...>\`\n` +
-      `• \`${prefix}whitelist list\`\n` +
-      `• \`${prefix}removewhitelist <@user|id>\`\n` +
-      `• \`${prefix}removewhitelist <@user|id> for <scopes...>\`\n\n` +
-      `**Scopes**: \`roles\`, \`channels\`, \`webhooks\`, \`bans\`, \`admin\`, \`all\`\n\n` +
-      `**Anti-bot-add gate**\n` +
-      `• \`-whitelist <userId>\` (owner only) → allow that user to add bots for 1 hour\n\n` +
-      `**Strive Review**\n` +
-      `Bots with dangerous perms are kicked and an owner ping + buttons are posted in #${STRIVE_REVIEW_CHANNEL_NAME}.\n`
-    );
+  async function postStriveReviewPanel({
+    guild,
+    botId,
+    botTag,
+    ownerId,
+    adder,
+    reason,
+    perms,
+    origin,
+  }) {
+    const reviewChannel = await ensureStriveReviewChannel(guild);
+    if (!reviewChannel) return;
+
+    const ownerPing = `<@${ownerId}>`;
+    const adderLine = adder ? `<@${adder.id}> (${adder.tag})` : "Unknown (audit log missing)";
+    const permsLine = perms?.length ? perms.join(", ") : "(unknown)";
+
+    const embed = new EmbedBuilder()
+      .setTitle("🚨 Strive Review: Bot Kicked")
+      .setDescription(
+        `${ownerPing}\n\n` +
+          `A bot was **kicked first** to prevent damage because it had **dangerous permissions**.\n\n` +
+          `**What to do:**\n` +
+          `• ✅ **Accept** — allows this bot to be re-added (it will NOT be auto-kicked for dangerous perms).\n` +
+          `• ❌ **Deny** — blocks this bot ID (it will be kicked every time it is re-added).\n\n` +
+          `**Immediate action on the adder:**\n` +
+          `If needed, you can kick/ban/timeout the user who added the bot: ${adder ? `<@${adder.id}>` : "unknown"}`
+      )
+      .addFields(
+        { name: "Bot", value: `**${botTag}**\n\`${botId}\``, inline: false },
+        { name: "Added / Changed by", value: adderLine, inline: false },
+        { name: "Dangerous Permissions", value: permsLine, inline: false },
+        { name: "Reason", value: reason, inline: false },
+        { name: "Event", value: origin, inline: true }
+      )
+      .setFooter({ text: "Buttons only work for the server owner (and configured bot admin)." })
+      .setTimestamp(Date.now());
+
+    await reviewChannel
+      .send({
+        content: ownerPing,
+        embeds: [embed],
+        components: [makeReviewButtons(guild.id, botId, false)],
+        allowedMentions: { users: [ownerId] },
+      })
+      .catch(() => {});
+  }
+
+  async function triggerStriveReviewKickFirst({
+    guild,
+    botMember,
+    adderOrExecutor,
+    origin,
+    reason,
+  }) {
+    const botId = botMember.id;
+    const botTag = botMember.user?.tag ?? "UnknownBot";
+    const ownerId = guild.ownerId;
+
+    // If denied, always keep denied. If approved, we still re-review on a new dangerous detection?
+    // Your current requirement: Accept/deny controls re-add. We'll keep approval until denied.
+    // But if you want "must be reviewed every time", tell me and I’ll change it.
+    const perms = dangerousPermsList(botMember);
+
+    // Store pending
+    const pending = getPendingMap(guild.id);
+    pending.set(botId, {
+      at: Date.now(),
+      reason,
+      origin,
+      perms,
+      adderId: adderOrExecutor?.id ?? null,
+    });
+
+    // KICK FIRST (your requirement)
+    if (botMember.kickable) {
+      await botMember.kick(`Strive Review: ${reason}`).catch(() => {});
+    } else {
+      await botMember.roles.set([], `Strive Review: ${reason}`).catch(() => {});
+    }
+
+    // Then post review embed + buttons + owner ping
+    await postStriveReviewPanel({
+      guild,
+      botId,
+      botTag,
+      ownerId,
+      adder: adderOrExecutor,
+      reason,
+      perms,
+      origin,
+    });
   }
 
   async function bumpAndCheck(guild, executor, field, reason) {
@@ -396,83 +436,7 @@ module.exports = (client) => {
   }
 
   // =========================
-  // STRIVE REVIEW CORE
-  // =========================
-  async function triggerStriveReviewKickFirst({
-    guild,
-    botMember,
-    adderOrExecutor, // may be null
-    reason,
-    dangerousPerms,
-    origin, // "JOIN" or "ROLE_UPDATE" etc.
-  }) {
-    const botId = botMember.id;
-    const botTag = botMember.user?.tag ?? "UnknownBot";
-    const ownerId = guild.ownerId;
-
-    // Record pending (for button checks)
-    const pending = getPendingMap(guild.id);
-    pending.set(botId, {
-      at: Date.now(),
-      reason,
-      origin,
-      perms: dangerousPerms,
-      adderId: adderOrExecutor?.id ?? null,
-    });
-
-    // IMPORTANT: kick first (your requirement)
-    if (botMember.kickable) {
-      await botMember.kick(`Strive Review: ${reason}`).catch(() => {});
-    } else {
-      // fallback if can't kick: try remove roles
-      await botMember.roles.set([], `Strive Review: ${reason}`).catch(() => {});
-    }
-
-    // Create/find channel AFTER kick
-    const reviewChannel = await ensureStriveReviewChannel(guild);
-    if (!reviewChannel) return;
-
-    const ownerPing = `<@${ownerId}>`;
-    const adderText = adderOrExecutor
-      ? `<@${adderOrExecutor.id}> (${adderOrExecutor.tag})`
-      : "Unknown (audit log missing)";
-
-    const permsText = dangerousPerms.length ? dangerousPerms.join(", ") : "(unknown)";
-
-    const embed = new EmbedBuilder()
-      .setTitle("🚨 Strive Review: Bot Removed")
-      .setDescription(
-        `${ownerPing}\n\n` +
-          `A bot was removed **before it could act** because it had dangerous permissions.\n\n` +
-          `**How to handle this:**\n` +
-          `• **Accept** → allows this bot to be re-added in the future (it will no longer be auto-kicked for these perms).\n` +
-          `• **Deny** → blocks this bot from being re-added (it will be kicked every time).\n\n` +
-          `If you want immediate action on the user who added it, you can moderate them directly (kick/ban/time-out) in Discord.`
-      )
-      .addFields(
-        { name: "Bot", value: `**${botTag}**\n\`${botId}\``, inline: false },
-        { name: "Added / Changed by", value: adderText, inline: false },
-        { name: "Detected Dangerous Permissions", value: permsText, inline: false },
-        { name: "Reason", value: reason, inline: false },
-        { name: "Event", value: origin, inline: true }
-      )
-      .setFooter({ text: "Buttons work only for the server owner (and configured bot admin)." })
-      .setTimestamp(Date.now());
-
-    const row = makeReviewButtons(guild.id, botId, false);
-
-    await reviewChannel
-      .send({
-        content: ownerPing,
-        embeds: [embed],
-        components: [row],
-        allowedMentions: { users: [ownerId] },
-      })
-      .catch(() => {});
-  }
-
-  // =========================
-  // BUTTON INTERACTIONS
+  // BUTTON INTERACTIONS (Accept / Deny)
   // =========================
   client.on("interactionCreate", async (interaction) => {
     if (!interaction.isButton()) return;
@@ -488,7 +452,6 @@ module.exports = (client) => {
       return;
     }
 
-    // Only owner or extra admin can press
     const allowed =
       interaction.user.id === guild.ownerId || interaction.user.id === EXTRA_WHITELIST_ID;
 
@@ -500,15 +463,7 @@ module.exports = (client) => {
     const pending = getPendingMap(guild.id);
     const info = pending.get(botId);
 
-    if (!info) {
-      await interaction.reply({ content: "ℹ️ That bot is not pending review anymore.", ephemeral: true }).catch(() => {});
-      // also disable buttons if possible
-      try {
-        await interaction.message.edit({ components: [makeReviewButtons(guild.id, botId, true)] });
-      } catch {}
-      return;
-    }
-
+    // Even if not pending anymore, we can still accept/deny by botId (owner intent).
     const approved = getApprovedSet(guild.id);
     const denied = getDeniedSet(guild.id);
 
@@ -517,7 +472,6 @@ module.exports = (client) => {
       denied.delete(botId);
       pending.delete(botId);
 
-      // Update embed + disable buttons
       const edited = EmbedBuilder.from(interaction.message.embeds?.[0] ?? new EmbedBuilder())
         .setColor(0x2ecc71)
         .addFields({ name: "Decision", value: `✅ **ACCEPTED** by <@${interaction.user.id}>`, inline: false });
@@ -527,7 +481,7 @@ module.exports = (client) => {
         .catch(() => {});
 
       await interaction.reply({
-        content: `✅ Accepted. You can now re-add \`${botId}\` — it will not be auto-kicked for dangerous perms.`,
+        content: `✅ Accepted. You can re-add \`${botId}\` and it will NOT be auto-kicked for dangerous perms.`,
         ephemeral: true,
       }).catch(() => {});
       return;
@@ -554,46 +508,35 @@ module.exports = (client) => {
   });
 
   // =========================
-  // COMMANDS
+  // COMMANDS (whitelist + help)
   // =========================
   client.on("messageCreate", async (message) => {
     if (!message.guild || message.author.bot) return;
 
     const content = message.content.trim();
-
-    // Anti-bot-add gate command: -whitelist <userId> (owner only)
-    if (content.startsWith("-whitelist")) {
-      if (message.author.id !== message.guild.ownerId) {
-        await message.reply("Only the server owner can whitelist users to add bots.");
-        return;
-      }
-
-      const targetId = content.split(/\s+/)[1];
-      if (!targetId || !/^\d{16,22}$/.test(targetId)) {
-        await message.reply("Usage: `-whitelist <user-id>`");
-        return;
-      }
-
-      const map = getBotAddWhitelistMap(message.guild.id);
-      map.set(targetId, Date.now() + BOT_ADD_WHITELIST_MS);
-      await message.reply(`✅ <@${targetId}> can add bots for the next hour.`);
-      return;
-    }
-
-    // "=" commands
     if (!content.startsWith("=")) return;
 
     const tokens = content.split(/\s+/);
     const cmd = tokens[0].toLowerCase();
 
     if (cmd === "=help") {
-      await message.reply(helpText("="));
+      await message.reply(
+        `**Anti-nuke commands**\n` +
+          `• \`=help\`\n` +
+          `• \`=whitelist <@user|id>\` *(defaults to \`all\`)*\n` +
+          `• \`=whitelist <@user|id> for <scopes...>\`\n` +
+          `• \`=whitelist list\`\n` +
+          `• \`=removewhitelist <@user|id>\`\n` +
+          `• \`=removewhitelist <@user|id> for <scopes...>\`\n\n` +
+          `**Scopes**: \`roles\`, \`channels\`, \`webhooks\`, \`bans\`, \`admin\`, \`all\`\n\n` +
+          `**Strive Review**\n` +
+          `Bots with dangerous perms are kicked and an owner ping + Accept/Deny buttons are posted in #${STRIVE_REVIEW_CHANNEL_NAME}.\n`
+      );
       return;
     }
 
     const isOwnerOrAdmin =
-      message.author.id === message.guild.ownerId ||
-      message.author.id === EXTRA_WHITELIST_ID;
+      message.author.id === message.guild.ownerId || message.author.id === EXTRA_WHITELIST_ID;
 
     // =whitelist list
     if (cmd === "=whitelist" && tokens[1]?.toLowerCase() === "list") {
@@ -611,163 +554,113 @@ module.exports = (client) => {
       return;
     }
 
-    // =whitelist / =removewhitelist
-    if (cmd === "=whitelist" || cmd === "=removewhitelist") {
-      if (!isOwnerOrAdmin) {
-        await message.reply("⚠️ Only the server owner / bot admin can manage the whitelist.");
-        return;
+    if (cmd !== "=whitelist" && cmd !== "=removewhitelist") return;
+
+    if (!isOwnerOrAdmin) {
+      await message.reply("⚠️ Only the server owner / bot admin can manage the whitelist.");
+      return;
+    }
+
+    const target =
+      message.mentions.users.first() || (await safeFetchUser(message.client, tokens[1]));
+
+    if (!target) {
+      await message.reply("⚠️ Invalid user ID/mention.");
+      return;
+    }
+
+    const scopeTokens = parseScopesFromCommand(tokens);
+    const scopes = normalizeScopes(scopeTokens);
+    const map = getWhitelistMap(message.guild.id);
+
+    if (cmd === "=whitelist") {
+      const existing = map.get(target.id) ?? new Set();
+      if (scopes.has("all") || existing.has("all")) map.set(target.id, new Set(["all"]));
+      else {
+        for (const s of scopes) existing.add(s);
+        map.set(target.id, existing);
       }
-
-      const target =
-        message.mentions.users.first() ||
-        (await safeFetchUser(message.client, tokens[1]));
-
-      if (!target) {
-        await message.reply(`⚠️ Invalid user.\n\n${helpText("=")}`);
-        return;
-      }
-
-      const scopeTokens = parseScopesFromCommand(tokens);
-      const scopes = normalizeScopes(scopeTokens);
-      const map = getWhitelistMap(message.guild.id);
-
-      if (cmd === "=whitelist") {
-        const existing = map.get(target.id) ?? new Set();
-
-        if (scopes.has("all") || existing.has("all")) {
-          map.set(target.id, new Set(["all"]));
-        } else {
-          for (const s of scopes) existing.add(s);
-          map.set(target.id, existing);
-        }
-
-        await message.reply(
-          `✅ Whitelisted **${target.tag}** for: \`${formatScopes(map.get(target.id))}\``
-        );
-        return;
-      }
-
-      // removewhitelist
-      if (!map.has(target.id)) {
-        await message.reply(`ℹ️ ${target.tag} is not whitelisted.`);
-        return;
-      }
-
-      const hasFor = tokens.map((t) => t.toLowerCase()).includes("for");
-
-      if (!hasFor || scopes.has("all")) {
-        map.delete(target.id);
-        await message.reply(`✅ Removed **${target.tag}** from the whitelist.`);
-        return;
-      }
-
-      const existing = map.get(target.id);
-      if (existing.has("all")) {
-        map.delete(target.id);
-        await message.reply(
-          `✅ Removed **${target.tag}** from \`all\` whitelist.\n` +
-            `If you want partial whitelist, re-add with: \`=whitelist ${target.id} for roles channels\``
-        );
-        return;
-      }
-
-      for (const s of scopes) existing.delete(s);
-      if (existing.size === 0) map.delete(target.id);
-      else map.set(target.id, existing);
 
       await message.reply(
-        `✅ Updated whitelist for **${target.tag}**: ` +
-          (map.has(target.id) ? `\`${formatScopes(map.get(target.id))}\`` : "`(removed)`")
+        `✅ Whitelisted **${target.tag}** for: \`${formatScopes(map.get(target.id))}\``
       );
+      return;
     }
+
+    // =removewhitelist
+    if (!map.has(target.id)) {
+      await message.reply(`ℹ️ ${target.tag} is not whitelisted.`);
+      return;
+    }
+
+    const hasFor = tokens.map((t) => t.toLowerCase()).includes("for");
+    if (!hasFor || scopes.has("all")) {
+      map.delete(target.id);
+      await message.reply(`✅ Removed **${target.tag}** from the whitelist.`);
+      return;
+    }
+
+    const existing = map.get(target.id);
+    if (existing.has("all")) {
+      map.delete(target.id);
+      await message.reply(
+        `✅ Removed **${target.tag}** from \`all\` whitelist.\n` +
+          `Re-add partial with: \`=whitelist ${target.id} for roles channels\``
+      );
+      return;
+    }
+
+    for (const s of scopes) existing.delete(s);
+    if (existing.size === 0) map.delete(target.id);
+    else map.set(target.id, existing);
+
+    await message.reply(
+      `✅ Updated whitelist for **${target.tag}**: ` +
+        (map.has(target.id) ? `\`${formatScopes(map.get(target.id))}\`` : "`(removed)`")
+    );
   });
 
   // =========================
-  // BOT JOIN HANDLER
+  // STRIVE REVIEW ENFORCEMENT
   // =========================
+
+  // On bot join: if denied -> kick; if approved -> allow; else if dangerous -> kick+review
   client.on("guildMemberAdd", async (member) => {
     const guild = member.guild;
     if (!guild || guild.available === false) return;
     if (!member.user.bot) return;
 
-    // If denied, always kick (no panel needed; but we still post a panel so owner sees it)
     if (isBotDenied(guild.id, member.id)) {
       const adder = await getBotAdder(guild, member);
       await triggerStriveReviewKickFirst({
         guild,
         botMember: member,
         adderOrExecutor: adder,
-        reason: "Bot is DENIED in Strive Review (blocked from re-adding).",
-        dangerousPerms: ["Denied List Match"],
         origin: "JOIN",
+        reason: "Bot is DENIED in Strive Review (blocked from re-adding).",
       });
       return;
     }
 
-    // If approved, allow to join (even if dangerous)
     if (isBotApproved(guild.id, member.id)) return;
 
-    // Anti-bot-add gate: only owner or temporarily whitelisted can add bots
-    const adder = await getBotAdder(guild, member);
-
-    const ownerId = guild.ownerId;
-    const allowMap = botAddWhitelist.get(guild.id);
-    const expireAt = adder?.id ? allowMap?.get(adder.id) : null;
-
-    const allowedAdder =
-      adder?.id === ownerId ||
-      (expireAt && Date.now() < expireAt);
-
-    if (!allowedAdder) {
-      // kick unauthorized bot (no review needed)
-      await member.kick("Unauthorized bot addition (owner or -whitelist required)").catch(() => {});
-      const reviewChannel = await ensureStriveReviewChannel(guild);
-      const ownerPing = `<@${ownerId}>`;
-
-      const embed = new EmbedBuilder()
-        .setTitle("🛑 Anti-Bot Gate: Bot Rejected")
-        .setDescription(
-          `${ownerPing}\n\nA bot was rejected because the adder was not authorized.\n\n` +
-            `Owner can temporarily allow a user to add bots for 1 hour with:\n` +
-            `\`-whitelist <userId>\``
-        )
-        .addFields(
-          { name: "Bot", value: `**${member.user.tag}**\n\`${member.id}\``, inline: false },
-          { name: "Adder", value: adder ? `<@${adder.id}> (${adder.tag})` : "Unknown", inline: false }
-        )
-        .setTimestamp(Date.now());
-
-      await reviewChannel
-        ?.send({
-          content: ownerPing,
-          embeds: [embed],
-          allowedMentions: { users: [ownerId] },
-        })
-        .catch(() => {});
-      return;
-    }
-
-    // If allowed to add, now enforce Strive Review if the bot joins dangerous
     if (hasDangerousGuildPerms(member)) {
+      const adder = await getBotAdder(guild, member);
       await triggerStriveReviewKickFirst({
         guild,
         botMember: member,
         adderOrExecutor: adder,
-        reason: "Bot joined with dangerous permissions.",
-        dangerousPerms: dangerousPermsList(member),
         origin: "JOIN",
+        reason: "Bot joined with dangerous permissions.",
       });
     }
   });
 
-  // =========================
-  // BOT DANGEROUS PERMS AFTER JOIN
-  // =========================
+  // If bot is granted dangerous perms later: kick+review (unless approved)
   client.on("guildMemberUpdate", async (oldMember, newMember) => {
     const guild = newMember.guild;
     if (!guild || guild.available === false) return;
 
-    // Bots: if they become dangerous later, kick + review (unless approved)
     if (newMember.user.bot) {
       if (isBotDenied(guild.id, newMember.id)) {
         const executor = await getAuditExecutor(guild, AuditLogEvent.MemberRoleUpdate, newMember.id);
@@ -775,9 +668,8 @@ module.exports = (client) => {
           guild,
           botMember: newMember,
           adderOrExecutor: executor,
-          reason: "Bot is DENIED in Strive Review (blocked from re-adding).",
-          dangerousPerms: ["Denied List Match"],
           origin: "ROLE_UPDATE",
+          reason: "Bot is DENIED in Strive Review (blocked from re-adding).",
         });
         return;
       }
@@ -796,16 +688,14 @@ module.exports = (client) => {
           guild,
           botMember: newMember,
           adderOrExecutor: executor,
-          reason: "Bot was granted dangerous permissions after joining.",
-          dangerousPerms: dangerousPermsList(newMember),
           origin: "ROLE_UPDATE",
+          reason: "Bot was granted dangerous permissions after joining.",
         });
       }
-
       return;
     }
 
-    // Humans: admin grant revert (scoped whitelist)
+    // (Optional) Human admin-grant revert is still here if you want it:
     const hadAdmin = oldMember.permissions.has(PermissionsBitField.Flags.Administrator);
     const hasAdmin = newMember.permissions.has(PermissionsBitField.Flags.Administrator);
     if (hadAdmin || !hasAdmin) return;
@@ -818,20 +708,7 @@ module.exports = (client) => {
 
     try {
       await newMember.roles.set(oldMember.roles.cache.map((r) => r.id));
-
-      const logChannel = guild.channels.cache.find(
-        (c) =>
-          c.type === ChannelType.GuildText &&
-          c.permissionsFor(guild.members.me)?.has("SendMessages")
-      );
-
-      await logChannel?.send(
-        `⚠️ Auto-reverted **Administrator** permission granted to ${newMember.user}.\n` +
-          `Executor: **${executor ? executor.tag : "Unknown"}**`
-      );
-    } catch (err) {
-      client.logger?.error?.(`[ANTINUKE] Failed to revert admin roles:`, err);
-    }
+    } catch {}
   });
 
   // =========================
@@ -842,12 +719,10 @@ module.exports = (client) => {
     if (!guild || guild.available === false) return;
 
     const executor = await getAuditExecutor(guild, AuditLogEvent.ChannelDelete, channel.id);
+    const field =
+      channel.type === ChannelType.GuildCategory ? "categoryDelete" : "channelDelete";
 
-    if (channel.type === ChannelType.GuildCategory) {
-      await bumpAndCheck(guild, executor, "categoryDelete", "Category nuke detected");
-    } else {
-      await bumpAndCheck(guild, executor, "channelDelete", "Channel nuke detected");
-    }
+    await bumpAndCheck(guild, executor, field, "Channel/Category nuke detected");
   });
 
   client.on("channelCreate", async (channel) => {
@@ -945,7 +820,7 @@ module.exports = (client) => {
     try {
       for (const role of guild.roles.cache.values()) {
         if (role.managed) continue;
-        if (role.id === guild.id) continue;
+        if (role.id === guild.id) continue; // @everyone
 
         const perms = role.permissions;
         const hasBad =
@@ -968,11 +843,7 @@ module.exports = (client) => {
           .remove(PermissionsBitField.Flags.BanMembers)
           .remove(PermissionsBitField.Flags.KickMembers);
 
-        try {
-          await role.setPermissions(safePerms, `[ANTINUKE] ${reason}`);
-        } catch {
-          client.logger?.warn?.(`[ANTINUKE] Could not sanitize role ${role.name} in ${guild.name}`);
-        }
+        await role.setPermissions(safePerms, `[ANTINUKE] ${reason}`).catch(() => {});
       }
 
       const alertChannel = guild.channels.cache.find(
