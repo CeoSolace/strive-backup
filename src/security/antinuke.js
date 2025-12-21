@@ -8,7 +8,9 @@
 // ✅ Accept => bot is allowed to rejoin in future even with dangerous perms
 // ✅ Deny   => bot is blocked (kicked every time)
 //
-// Plus: basic anti-nuke counters (channels/roles/webhooks/bans) + optional human admin-grant revert with scoped whitelist.
+// Plus: basic anti-nuke counters (channels/roles/webhooks/bans)
+// + optional human admin-grant revert with scoped whitelist.
+// + anti-mass role removal: removing 5 roles within ~3 minutes => derole executor + owner review panel (restore/keep)
 
 const {
   Collection,
@@ -30,6 +32,13 @@ module.exports = (client) => {
 
   const EXTRA_WHITELIST_ID = "1400281740978815118";
   const STRIVE_REVIEW_CHANNEL_NAME = "strive-review";
+
+  // Dedupe to stop triple panels from cascaded events
+  const STRIVE_DEDUPE_MS = 60_000;
+
+  // Anti mass role removal ("anti-massrole delete")
+  const ROLE_STRIP_WINDOW = 180_000; // ~3 minutes
+  const ROLE_STRIP_THRESHOLD = 5;
 
   // Bot perms that trigger Strive Review kick
   const BOT_DANGEROUS_PERMS = [
@@ -75,6 +84,15 @@ module.exports = (client) => {
   // denied: guildId -> Set(botId)
   const deniedBots = new Collection();
 
+  // Strive dedupe: `${guildId}:${botId}` -> lastPostedAt
+  const striveDedupe = new Collection();
+
+  // Human mass-role-strip counters: `${guildId}:${executorId}` -> { count, lastAction }
+  const roleStripCache = new Collection();
+
+  // Human review pending: guildId -> Map(userId -> { at, reason, origin, removedRoles })
+  const pendingHumanReview = new Collection();
+
   // =========================
   // SCOPES (human whitelist)
   // =========================
@@ -101,10 +119,19 @@ module.exports = (client) => {
   // =========================
   setInterval(() => {
     const now = Date.now();
+
     for (const [key, data] of actorCache.entries()) {
       if (now - data.lastAction > WINDOW) actorCache.delete(key);
     }
-  }, WINDOW);
+
+    for (const [key, data] of roleStripCache.entries()) {
+      if (now - data.lastAction > ROLE_STRIP_WINDOW) roleStripCache.delete(key);
+    }
+
+    for (const [key, t] of striveDedupe.entries()) {
+      if (now - t > STRIVE_DEDUPE_MS) striveDedupe.delete(key);
+    }
+  }, 30_000);
 
   // =========================
   // HELPERS
@@ -204,6 +231,11 @@ module.exports = (client) => {
     return pendingBotReview.get(guildId);
   }
 
+  function getPendingHumanMap(guildId) {
+    if (!pendingHumanReview.has(guildId)) pendingHumanReview.set(guildId, new Map());
+    return pendingHumanReview.get(guildId);
+  }
+
   function getApprovedSet(guildId) {
     if (!approvedBots.has(guildId)) approvedBots.set(guildId, new Set());
     return approvedBots.get(guildId);
@@ -244,7 +276,6 @@ module.exports = (client) => {
   }
 
   async function getBotAdder(guild, botMember) {
-    // Best-effort: who added the bot
     try {
       const logs = await guild.fetchAuditLogs({ limit: 8, type: AuditLogEvent.BotAdd });
       const now = Date.now();
@@ -260,14 +291,12 @@ module.exports = (client) => {
   }
 
   async function ensureStriveReviewChannel(guild) {
-    // find if exists
     const existing = guild.channels.cache.find(
       (c) => c.type === ChannelType.GuildText && c.name === STRIVE_REVIEW_CHANNEL_NAME
     );
 
     if (existing && existing.permissionsFor(guild.members.me)?.has("SendMessages")) return existing;
 
-    // create if missing (requires ManageChannels)
     try {
       const overwrites = [
         { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
@@ -286,7 +315,6 @@ module.exports = (client) => {
         },
       ];
 
-      // allow EXTRA admin to view if they exist in server
       if (guild.members.cache.has(EXTRA_WHITELIST_ID)) {
         overwrites.push({
           id: EXTRA_WHITELIST_ID,
@@ -303,9 +331,10 @@ module.exports = (client) => {
 
       return ch;
     } catch {
-      // fallback: any writable text channel
       return guild.channels.cache.find(
-        (c) => c.type === ChannelType.GuildText && c.permissionsFor(guild.members.me)?.has("SendMessages")
+        (c) =>
+          c.type === ChannelType.GuildText &&
+          c.permissionsFor(guild.members.me)?.has("SendMessages")
       );
     }
   }
@@ -324,6 +353,22 @@ module.exports = (client) => {
       .setDisabled(disabled);
 
     return new ActionRowBuilder().addComponents(accept, deny);
+  }
+
+  function makeHumanReviewButtons(guildId, userId, disabled = false) {
+    const restore = new ButtonBuilder()
+      .setCustomId(`strive:restore:${guildId}:${userId}`)
+      .setLabel("Restore Roles")
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(disabled);
+
+    const keep = new ButtonBuilder()
+      .setCustomId(`strive:keep:${guildId}:${userId}`)
+      .setLabel("Keep Derolled")
+      .setStyle(ButtonStyle.Danger)
+      .setDisabled(disabled);
+
+    return new ActionRowBuilder().addComponents(restore, keep);
   }
 
   async function postStriveReviewPanel({
@@ -352,7 +397,9 @@ module.exports = (client) => {
           `• ✅ **Accept** — allows this bot to be re-added (it will NOT be auto-kicked for dangerous perms).\n` +
           `• ❌ **Deny** — blocks this bot ID (it will be kicked every time it is re-added).\n\n` +
           `**Immediate action on the adder:**\n` +
-          `If needed, you can kick/ban/timeout the user who added the bot: ${adder ? `<@${adder.id}>` : "unknown"}`
+          `If needed, you can kick/ban/timeout the user who added the bot: ${
+            adder ? `<@${adder.id}>` : "unknown"
+          }`
       )
       .addFields(
         { name: "Bot", value: `**${botTag}**\n\`${botId}\``, inline: false },
@@ -374,6 +421,49 @@ module.exports = (client) => {
       .catch(() => {});
   }
 
+  async function postHumanReviewPanel({ guild, targetUser, executor, reason, removedRoles }) {
+    const reviewChannel = await ensureStriveReviewChannel(guild);
+    if (!reviewChannel) return;
+
+    const ownerId = guild.ownerId;
+    const ownerPing = `<@${ownerId}>`;
+
+    const removedPreview =
+      removedRoles?.length
+        ? removedRoles.map((r) => `<@&${r}>`).slice(0, 20).join(", ")
+        : "(none)";
+
+    const embed = new EmbedBuilder()
+      .setTitle("🚨 Strive Review: Mass Role Removal Detected")
+      .setDescription(
+        `${ownerPing}\n\n` +
+          `A user appears to be stripping roles quickly. As a precaution, they were **derolled** (not kicked).\n\n` +
+          `**What to do:**\n` +
+          `• ✅ **Restore Roles** — puts their previous roles back.\n` +
+          `• ❌ **Keep Derolled** — leaves them stripped.\n`
+      )
+      .addFields(
+        {
+          name: "Executor",
+          value: executor ? `<@${executor.id}> (${executor.tag})` : "Unknown",
+          inline: false,
+        },
+        { name: "Reason", value: reason, inline: false },
+        { name: "Previous Roles (snapshot)", value: removedPreview, inline: false }
+      )
+      .setFooter({ text: "Buttons only work for the server owner (and configured bot admin)." })
+      .setTimestamp(Date.now());
+
+    await reviewChannel
+      .send({
+        content: ownerPing,
+        embeds: [embed],
+        components: [makeHumanReviewButtons(guild.id, targetUser.id, false)],
+        allowedMentions: { users: [ownerId] },
+      })
+      .catch(() => {});
+  }
+
   async function triggerStriveReviewKickFirst({
     guild,
     botMember,
@@ -382,15 +472,20 @@ module.exports = (client) => {
     reason,
   }) {
     const botId = botMember.id;
+
+    // ---- DEDUPE: avoid multi-panels from cascading events ----
+    const dk = `${guild.id}:${botId}`;
+    const last = striveDedupe.get(dk) ?? 0;
+    if (Date.now() - last < STRIVE_DEDUPE_MS) return;
+    striveDedupe.set(dk, Date.now());
+    // ---------------------------------------------------------
+
     const botTag = botMember.user?.tag ?? "UnknownBot";
     const ownerId = guild.ownerId;
 
-    // If denied, always keep denied. If approved, we still re-review on a new dangerous detection?
-    // Your current requirement: Accept/deny controls re-add. We'll keep approval until denied.
-    // But if you want "must be reviewed every time", tell me and I’ll change it.
     const perms = dangerousPermsList(botMember);
 
-    // Store pending
+    // Store pending BEFORE we mutate roles/kick (prevents guildMemberUpdate loops)
     const pending = getPendingMap(guild.id);
     pending.set(botId, {
       at: Date.now(),
@@ -420,6 +515,19 @@ module.exports = (client) => {
     });
   }
 
+  async function deroleMemberKeepManaged(guild, member, reason) {
+    const removable = member.roles.cache
+      .filter((r) => r.id !== guild.id && !r.managed)
+      .map((r) => r.id);
+
+    const keepManaged = member.roles.cache.filter((r) => r.managed).map((r) => r.id);
+
+    try {
+      await member.roles.set(keepManaged, `[ANTINUKE] ${reason}`);
+    } catch {}
+    return removable;
+  }
+
   async function bumpAndCheck(guild, executor, field, reason) {
     if (!guild || !executor) return;
     if (executor.id === client.user.id) return;
@@ -436,14 +544,14 @@ module.exports = (client) => {
   }
 
   // =========================
-  // BUTTON INTERACTIONS (Accept / Deny)
+  // BUTTON INTERACTIONS (Accept / Deny + Human Restore/Keep)
   // =========================
   client.on("interactionCreate", async (interaction) => {
     if (!interaction.isButton()) return;
 
     const parts = interaction.customId.split(":");
     if (parts.length !== 4) return;
-    const [ns, action, guildId, botId] = parts;
+    const [ns, action, guildId, targetId] = parts;
     if (ns !== "strive") return;
 
     const guild = interaction.guild;
@@ -456,54 +564,127 @@ module.exports = (client) => {
       interaction.user.id === guild.ownerId || interaction.user.id === EXTRA_WHITELIST_ID;
 
     if (!allowed) {
-      await interaction.reply({ content: "⚠️ Only the server owner can do that.", ephemeral: true }).catch(() => {});
+      await interaction
+        .reply({ content: "⚠️ Only the server owner can do that.", ephemeral: true })
+        .catch(() => {});
       return;
     }
 
-    const pending = getPendingMap(guild.id);
-    const info = pending.get(botId);
+    // Bot decisions
+    if (action === "accept" || action === "deny") {
+      const approved = getApprovedSet(guild.id);
+      const denied = getDeniedSet(guild.id);
+      const botId = targetId;
 
-    // Even if not pending anymore, we can still accept/deny by botId (owner intent).
-    const approved = getApprovedSet(guild.id);
-    const denied = getDeniedSet(guild.id);
+      if (action === "accept") {
+        approved.add(botId);
+        denied.delete(botId);
+        getPendingMap(guild.id).delete(botId);
 
-    if (action === "accept") {
-      approved.add(botId);
-      denied.delete(botId);
-      pending.delete(botId);
+        const edited = EmbedBuilder.from(interaction.message.embeds?.[0] ?? new EmbedBuilder())
+          .setColor(0x2ecc71)
+          .addFields({
+            name: "Decision",
+            value: `✅ **ACCEPTED** by <@${interaction.user.id}>`,
+            inline: false,
+          });
 
-      const edited = EmbedBuilder.from(interaction.message.embeds?.[0] ?? new EmbedBuilder())
-        .setColor(0x2ecc71)
-        .addFields({ name: "Decision", value: `✅ **ACCEPTED** by <@${interaction.user.id}>`, inline: false });
+        await interaction.message
+          .edit({ embeds: [edited], components: [makeReviewButtons(guild.id, botId, true)] })
+          .catch(() => {});
 
-      await interaction.message
-        .edit({ embeds: [edited], components: [makeReviewButtons(guild.id, botId, true)] })
-        .catch(() => {});
+        await interaction
+          .reply({
+            content: `✅ Accepted. You can re-add \`${botId}\` and it will NOT be auto-kicked for dangerous perms.`,
+            ephemeral: true,
+          })
+          .catch(() => {});
+        return;
+      }
 
-      await interaction.reply({
-        content: `✅ Accepted. You can re-add \`${botId}\` and it will NOT be auto-kicked for dangerous perms.`,
-        ephemeral: true,
-      }).catch(() => {});
-      return;
+      if (action === "deny") {
+        denied.add(botId);
+        approved.delete(botId);
+        getPendingMap(guild.id).delete(botId);
+
+        const edited = EmbedBuilder.from(interaction.message.embeds?.[0] ?? new EmbedBuilder())
+          .setColor(0xe74c3c)
+          .addFields({
+            name: "Decision",
+            value: `❌ **DENIED** by <@${interaction.user.id}>`,
+            inline: false,
+          });
+
+        await interaction.message
+          .edit({ embeds: [edited], components: [makeReviewButtons(guild.id, botId, true)] })
+          .catch(() => {});
+
+        await interaction
+          .reply({
+            content: `❌ Denied. If \`${botId}\` is re-added, it will be kicked automatically.`,
+            ephemeral: true,
+          })
+          .catch(() => {});
+        return;
+      }
     }
 
-    if (action === "deny") {
-      denied.add(botId);
-      approved.delete(botId);
-      pending.delete(botId);
+    // Human mass role removal decisions
+    if (action === "restore" || action === "keep") {
+      const userId = targetId;
+      const pending = getPendingHumanMap(guild.id);
+      const info = pending.get(userId);
 
-      const edited = EmbedBuilder.from(interaction.message.embeds?.[0] ?? new EmbedBuilder())
-        .setColor(0xe74c3c)
-        .addFields({ name: "Decision", value: `❌ **DENIED** by <@${interaction.user.id}>`, inline: false });
+      if (!info) {
+        await interaction.reply({ content: "ℹ️ No pending human review found.", ephemeral: true }).catch(() => {});
+        return;
+      }
 
-      await interaction.message
-        .edit({ embeds: [edited], components: [makeReviewButtons(guild.id, botId, true)] })
-        .catch(() => {});
+      const targetMember = await guild.members.fetch(userId).catch(() => null);
+      if (!targetMember) {
+        await interaction.reply({ content: "⚠️ User not found in guild.", ephemeral: true }).catch(() => {});
+        return;
+      }
 
-      await interaction.reply({
-        content: `❌ Denied. If \`${botId}\` is re-added, it will be kicked automatically.`,
-        ephemeral: true,
-      }).catch(() => {});
+      if (action === "restore") {
+        const valid = (info.removedRoles ?? []).filter((rid) => {
+          const r = guild.roles.cache.get(rid);
+          return r && !r.managed;
+        });
+
+        try {
+          const managed = targetMember.roles.cache.filter((r) => r.managed).map((r) => r.id);
+          await targetMember.roles.set([...new Set([...managed, ...valid])], "Strive Review: restore roles");
+        } catch {}
+
+        pending.delete(userId);
+
+        const edited = EmbedBuilder.from(interaction.message.embeds?.[0] ?? new EmbedBuilder())
+          .setColor(0x2ecc71)
+          .addFields({ name: "Decision", value: `✅ **RESTORED** by <@${interaction.user.id}>`, inline: false });
+
+        await interaction.message
+          .edit({ embeds: [edited], components: [makeHumanReviewButtons(guild.id, userId, true)] })
+          .catch(() => {});
+
+        await interaction.reply({ content: "✅ Roles restored (best-effort).", ephemeral: true }).catch(() => {});
+        return;
+      }
+
+      if (action === "keep") {
+        pending.delete(userId);
+
+        const edited = EmbedBuilder.from(interaction.message.embeds?.[0] ?? new EmbedBuilder())
+          .setColor(0xe74c3c)
+          .addFields({ name: "Decision", value: `❌ **KEPT DEROLED** by <@${interaction.user.id}>`, inline: false });
+
+        await interaction.message
+          .edit({ embeds: [edited], components: [makeHumanReviewButtons(guild.id, userId, true)] })
+          .catch(() => {});
+
+        await interaction.reply({ content: "❌ Kept derolled.", ephemeral: true }).catch(() => {});
+        return;
+      }
     }
   });
 
@@ -530,7 +711,8 @@ module.exports = (client) => {
           `• \`=removewhitelist <@user|id> for <scopes...>\`\n\n` +
           `**Scopes**: \`roles\`, \`channels\`, \`webhooks\`, \`bans\`, \`admin\`, \`all\`\n\n` +
           `**Strive Review**\n` +
-          `Bots with dangerous perms are kicked and an owner ping + Accept/Deny buttons are posted in #${STRIVE_REVIEW_CHANNEL_NAME}.\n`
+          `Bots with dangerous perms are kicked and an owner ping + Accept/Deny buttons are posted in #${STRIVE_REVIEW_CHANNEL_NAME}.\n` +
+          `Humans stripping roles fast get derolled + owner review panel (Restore/Keep).\n`
       );
       return;
     }
@@ -624,7 +806,7 @@ module.exports = (client) => {
   // STRIVE REVIEW ENFORCEMENT
   // =========================
 
-  // On bot join: if denied -> kick; if approved -> allow; else if dangerous -> kick+review
+  // On bot join: if denied -> kick+review; if approved -> allow; else if dangerous -> kick+review
   client.on("guildMemberAdd", async (member) => {
     const guild = member.guild;
     if (!guild || guild.available === false) return;
@@ -657,11 +839,19 @@ module.exports = (client) => {
   });
 
   // If bot is granted dangerous perms later: kick+review (unless approved)
+  // Plus: anti mass role removal (humans)
   client.on("guildMemberUpdate", async (oldMember, newMember) => {
     const guild = newMember.guild;
     if (!guild || guild.available === false) return;
 
+    // -------------------------
+    // BOT REVIEW PATH
+    // -------------------------
     if (newMember.user.bot) {
+      // Ignore cascade updates right after we acted
+      const pend = getPendingMap(guild.id).get(newMember.id);
+      if (pend && Date.now() - pend.at < STRIVE_DEDUPE_MS) return;
+
       if (isBotDenied(guild.id, newMember.id)) {
         const executor = await getAuditExecutor(guild, AuditLogEvent.MemberRoleUpdate, newMember.id);
         await triggerStriveReviewKickFirst({
@@ -695,7 +885,68 @@ module.exports = (client) => {
       return;
     }
 
-    // (Optional) Human admin-grant revert is still here if you want it:
+    // -------------------------
+    // HUMAN: anti mass role removal (stripping roles)
+    // -------------------------
+    const removedCount = oldMember.roles.cache.size - newMember.roles.cache.size;
+    if (removedCount > 0) {
+      const executor = await getAuditExecutor(guild, AuditLogEvent.MemberRoleUpdate, newMember.id);
+
+      if (
+        executor &&
+        executor.id !== client.user.id &&
+        executor.id !== guild.ownerId &&
+        !isWhitelisted(guild, executor, "roles")
+      ) {
+        const k = `${guild.id}:${executor.id}`;
+        const rec = roleStripCache.get(k) ?? { count: 0, lastAction: Date.now() };
+
+        if (Date.now() - rec.lastAction > ROLE_STRIP_WINDOW) rec.count = 0;
+
+        rec.count += removedCount;
+        rec.lastAction = Date.now();
+        roleStripCache.set(k, rec);
+
+        if (rec.count >= ROLE_STRIP_THRESHOLD) {
+          // reset so we don't spam-derole repeatedly
+          rec.count = 0;
+          roleStripCache.set(k, rec);
+
+          const execMember = await guild.members.fetch(executor.id).catch(() => null);
+          if (execMember) {
+            const pending = getPendingHumanMap(guild.id);
+
+            const already = pending.get(execMember.id);
+            if (!already || Date.now() - already.at > ROLE_STRIP_WINDOW) {
+              const stripped = await deroleMemberKeepManaged(
+                guild,
+                execMember,
+                "Mass role removal detected"
+              );
+
+              pending.set(execMember.id, {
+                at: Date.now(),
+                reason: `Removed ${ROLE_STRIP_THRESHOLD}+ roles within ~3 minutes`,
+                origin: "MASS_ROLE_REMOVE",
+                removedRoles: stripped,
+              });
+
+              await postHumanReviewPanel({
+                guild,
+                targetUser: execMember.user,
+                executor,
+                reason: `Mass role removal detected (threshold ${ROLE_STRIP_THRESHOLD} roles / ~3 min).`,
+                removedRoles: stripped,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // -------------------------
+    // (Optional) Human admin-grant revert
+    // -------------------------
     const hadAdmin = oldMember.permissions.has(PermissionsBitField.Flags.Administrator);
     const hasAdmin = newMember.permissions.has(PermissionsBitField.Flags.Administrator);
     if (hadAdmin || !hasAdmin) return;
@@ -748,7 +999,12 @@ module.exports = (client) => {
     if (!overwritesChanged) return;
 
     const executor = await getAuditExecutor(guild, AuditLogEvent.ChannelOverwriteUpdate, newCh.id);
-    await bumpAndCheck(guild, executor, "channelPermEdit", "Mass channel permission overwrite edits detected");
+    await bumpAndCheck(
+      guild,
+      executor,
+      "channelPermEdit",
+      "Mass channel permission overwrite edits detected"
+    );
   });
 
   client.on("roleDelete", async (role) => {
@@ -847,7 +1103,9 @@ module.exports = (client) => {
       }
 
       const alertChannel = guild.channels.cache.find(
-        (c) => c.type === ChannelType.GuildText && c.permissionsFor(guild.members.me)?.has("SendMessages")
+        (c) =>
+          c.type === ChannelType.GuildText &&
+          c.permissionsFor(guild.members.me)?.has("SendMessages")
       );
 
       const msg =
