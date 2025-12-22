@@ -1,5 +1,5 @@
-const { stripe, getOrCreatePrice } = require("../../services/stripe");
-const Premium = require("../../database/schemas/premium");
+const { stripe, getOrCreatePrice } = require("../../services/stripe"); // ✅ correct
+const Premium = require("../../database/schemas/premium"); // ✅ correct
 
 module.exports = {
   name: "premium",
@@ -43,13 +43,13 @@ async function handle(userId, sub, ctx) {
       metadata: { userId },
     });
 
-    return reply(ctx, `💎 Buy Premium: ${session.url}`);
+    return reply(ctx, `💎 Buy Premium:\n${session.url}`);
   }
 
   if (sub === "cancel") {
     const premium = await Premium.findOne({ userId });
-    if (!premium || !premium.stripeSubscriptionId)
-      return reply(ctx, "You don’t have an active subscription.");
+    if (!premium?.stripeSubscriptionId)
+      return reply(ctx, "No active subscription found.");
 
     await stripe.subscriptions.update(premium.stripeSubscriptionId, {
       cancel_at_period_end: true,
@@ -58,7 +58,7 @@ async function handle(userId, sub, ctx) {
     premium.status = "canceled";
     await premium.save();
 
-    return reply(ctx, "Your subscription will end at the billing period.");
+    return reply(ctx, "Subscription will end at the billing period.");
   }
 }
 
