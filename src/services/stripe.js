@@ -1,15 +1,15 @@
 const Stripe = require("stripe");
-const Config = require("../database/schemas/config");
+const Config = require("../database/schemas/config"); // ✅ FIXED
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 async function getOrCreatePrice() {
-  let priceConfig = await Config.findOne({ key: "PREMIUM_PRICE_ID" });
-  if (priceConfig) return priceConfig.value;
+  let stored = await Config.findOne({ key: "PREMIUM_PRICE_ID" });
+  if (stored) return stored.value;
 
   const product = await stripe.products.create({
     name: "Premium Subscription",
-    description: "Full access to all premium features",
+    description: "Full access",
   });
 
   const price = await stripe.prices.create({
