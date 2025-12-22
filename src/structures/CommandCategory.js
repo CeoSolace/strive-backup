@@ -119,4 +119,11 @@ module.exports = {
     emoji: "🛠",
     enabled: true,
   },
+
+  PREMIUM: {
+    name: "Premium",
+    image: "https://icons.iconarchive.com/icons/papirus-team/papirus-apps/256/stripe-icon.png",
+    emoji: "💎",
+    enabled: true,
+  },
 };
