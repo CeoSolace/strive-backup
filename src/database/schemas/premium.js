@@ -4,8 +4,8 @@ const premiumSchema = new mongoose.Schema(
   {
     userId: { type: String, required: true, index: true },
 
-    stripeCustomerId: { type: String },
-    stripeSubscriptionId: { type: String },
+    stripeCustomerId: String,
+    stripeSubscriptionId: String,
 
     status: {
       type: String,
@@ -13,7 +13,7 @@ const premiumSchema = new mongoose.Schema(
       default: "incomplete",
     },
 
-    currentPeriodEnd: { type: Date },
+    currentPeriodEnd: Date,
   },
   { timestamps: true }
 );
