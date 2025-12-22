@@ -5,13 +5,11 @@ mongoose.set("strictQuery", true);
 
 module.exports = {
   async initializeMongoose() {
-    log(`Connecting to MongoDb...`);
+    log("Connecting to MongoDb...");
 
     try {
       await mongoose.connect(process.env.MONGO_CONNECTION);
-
       success("Mongoose: Database connection established");
-
       return mongoose.connection;
     } catch (err) {
       error("Mongoose: Failed to connect to database", err);
@@ -28,5 +26,9 @@ module.exports = {
     TranslateLog: require("./schemas/TranslateLog").model,
     User: require("./schemas/User"),
     Suggestions: require("./schemas/Suggestions").model,
+
+    // 🔥 NEW
+    Premium: require("./schemas/premium"),
+    Config: require("./schemas/config"),
   },
 };
