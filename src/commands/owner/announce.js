@@ -3,7 +3,7 @@ module.exports = {
   aliases: ["ann"],
   description: "Send a global announcement to all servers",
   usage: ",announce <message>",
-  category: "owner", // 🔥 MUST MATCH CATEGORY KEY
+  category: "INFORMATION", // 🔥 MUST MATCH CATEGORY KEY
   ownerOnly: true,
 
   async execute(client, message, args) {
