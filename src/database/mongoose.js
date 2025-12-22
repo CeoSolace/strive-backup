@@ -27,7 +27,6 @@ module.exports = {
     User: require("./schemas/User"),
     Suggestions: require("./schemas/Suggestions").model,
 
-    // 🔥 NEW
     Premium: require("./schemas/premium"),
     Config: require("./schemas/config"),
   },
