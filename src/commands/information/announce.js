@@ -27,7 +27,7 @@ module.exports = {
     let failed = 0;
 
     const embed = new EmbedBuilder()
-      .setTitle("Strive Announcements")
+      .setTitle("Bright Announcements")
       .setDescription(announcement)
       .setTimestamp(Date.now());
 
