@@ -12,7 +12,7 @@ class OmniDiscordLogger {
     if (!client) throw new Error('Client instance required');
     this.client = client;
     this.deployedGuilds = new Set();
-    this.LOG_CHANNEL_NAME = 'strive-logs';
+    this.LOG_CHANNEL_NAME = 'bright-logs';
     this.LOG_STRUCTURE = {
       '💬・Message Logs': [
         'message-deleted',
@@ -300,7 +300,7 @@ class OmniDiscordLogger {
       .setColor(this.COLOR_MAP[categoryName] || Colors.Blurple)
       .setTimestamp()
       .setFooter({
-        text: `Strive Logging v6.0 • ${new Date().toISOString().split('T')[0]}`,
+        text: `Bright Logging v6.0 • ${new Date().toISOString().split('T')[0]}`,
         iconURL: this.client.user.displayAvatarURL()
       });
 
