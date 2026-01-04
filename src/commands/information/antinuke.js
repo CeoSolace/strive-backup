@@ -1,6 +1,6 @@
 // src/commands/information/antinuke.js
 // /antinuke guide
-// Explains the entire anti-nuke + Strive Review system.
+// Explains the entire anti-nuke + Bright Review system.
 // Adds two buttons:
 //  - "Dumbify" (simpler explanation)
 //  - "ik what im talking about" (full nerd mode)
@@ -37,7 +37,7 @@ function permissionChecklistLines(guild) {
     {
       name: "Kick Members",
       ok: me.permissions.has(PermissionsBitField.Flags.KickMembers),
-      why: "kick dangerous bots immediately (Strive Review kick-first)",
+      why: "kick dangerous bots immediately (Bright Review kick-first)",
     },
     {
       name: "Manage Roles",
@@ -47,7 +47,7 @@ function permissionChecklistLines(guild) {
     {
       name: "Manage Channels",
       ok: me.permissions.has(PermissionsBitField.Flags.ManageChannels),
-      why: "create #strive-review if missing",
+      why: "create #Bright-review if missing",
     },
     {
       name: "Manage Webhooks",
@@ -93,11 +93,11 @@ function buildDumbEmbeds(guild) {
   3) **Stops role stripping**: if someone removes a bunch of roles quickly, they get **derolled** and the owner gets a decision panel.
   `;
 
-  const strive = stripIndent`
-  ## 1) Strive Review (dangerous bots)
+  const Bright = stripIndent`
+  ## 1) Bright Review (dangerous bots)
   If a bot has perms like **Admin**, **Manage Roles**, **Manage Channels**, **Manage Webhooks**, **Ban/Kick**:
   - bot is **kicked first**
-  - private **#strive-review** is created if missing
+  - private **#bright-review** is created if missing
   - owner gets buttons:
     - ✅ **Accept** = allow this bot ID in future (even with dangerous perms)
     - ❌ **Deny** = block this bot ID (auto-kicked forever)
@@ -134,9 +134,9 @@ function buildDumbEmbeds(guild) {
       .setDescription(overview),
 
     new EmbedBuilder()
-      .setTitle("Strive Review (Bots)")
+      .setTitle("Bright Review (Bots)")
       .setColor(EMBED_COLORS.BOT_EMBED)
-      .setDescription(strive),
+      .setDescription(bright),
 
     new EmbedBuilder()
       .setTitle("Human Role Stripping")
@@ -159,7 +159,7 @@ function buildNerdEmbeds(guild) {
   const overview = stripIndent`
   This module is two systems welded together with paranoia:
 
-  **A) Strive Review (Bot gate)**
+  **A) Bright Review (Bot gate)**
   - Per-guild **approved/denied** bot ID sets.
   - Detects dangerous perms on **join** and **later role updates**.
   - Enforces **kick first**, then posts an owner decision panel.
@@ -173,8 +173,8 @@ function buildNerdEmbeds(guild) {
   - optional admin-grant revert unless whitelisted
   `;
 
-  const strive = stripIndent`
-  ## A) Strive Review (Bot gate)
+  const Bright = stripIndent`
+  ## A) Bright Review (Bot gate)
 
   **Dangerous perms trigger list**
   - Administrator, ManageGuild, ManageRoles, ManageChannels, ManageWebhooks, BanMembers, KickMembers
@@ -199,7 +199,7 @@ function buildNerdEmbeds(guild) {
   - pending timestamps prevent reacting to our own enforcement loops
 
   **Review channel**
-  - creates private #strive-review if missing (owner + bot + optional admin ID)
+  - creates private #bright-review if missing (owner + bot + optional admin ID)
   - Accept/Deny buttons only work for owner/extra admin
   `;
 
@@ -254,9 +254,9 @@ function buildNerdEmbeds(guild) {
       .setDescription(overview),
 
     new EmbedBuilder()
-      .setTitle("Strive Review: Bot Gate")
+      .setTitle("Bright Review: Bot Gate")
       .setColor(EMBED_COLORS.BOT_EMBED)
-      .setDescription(strive),
+      .setDescription(Bright),
 
     new EmbedBuilder()
       .setTitle("Human Protections")
@@ -278,7 +278,7 @@ function buildNerdEmbeds(guild) {
 /** ---------- command ---------- **/
 module.exports = {
   name: "antinuke",
-  description: "anti-nuke + Strive Review guide",
+  description: "anti-nuke + Bright Review guide",
   category: "INFORMATION",
   userPermissions: ["ManageGuild"],
 
