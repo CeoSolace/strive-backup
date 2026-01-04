@@ -1,5 +1,5 @@
 module.exports = {
-  OWNER_IDS: ["1400281740978815118"], // Bot owner ID's
+  OWNER_IDS: ["1414726263112732775"], // Bot owner ID's
   SUPPORT_SERVER: "https://discord.gg/kgDrVng25h", // Your bot support server
   PREFIX_COMMANDS: {
     ENABLED: true, // Enable/Disable prefix commands
@@ -37,8 +37,8 @@ module.exports = {
 
 DASHBOARD: {
     enabled: true,
-    baseURL: "https://solbot.store",        // MUST be HTTPS, NO PORT
-    failureURL: "https://solbot.store",     // HTTPS here too
+    baseURL: "https://brightbot.online",        // MUST be HTTPS, NO PORT
+    failureURL: "https://brightbot.online",     // HTTPS here too
     port: "8081",                           // The REAL dashboard port
 },
 
