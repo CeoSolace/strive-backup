@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+  <%- include('includes/head') %>
+
+  <body class="hold-transition skin-dark sidebar-mini">
+    <div class="wrapper" style="background-color:#0f0f0f; color:#e0e0e0;">
+      <%- include('includes/header') %>
+      <%- include('includes/sidebar') %>
+
+      <div class="content-wrapper" style="background-color:#121212;">
+        <section class="content-header" style="padding:20px 24px; border-bottom:1px solid #2a2a2a;">
+          <h1 style="font-weight:700; font-size:1.8rem; color:#f0f0f0; margin:0;">
+            Privacy Policy <small style="color:#aaa; font-weight:400;">Bright</small>
+          </h1>
+          <ol class="breadcrumb" style="background:transparent; padding:0; margin-top:8px; font-size:0.95rem;">
+            <li>
+              <a href="/" style="color:#bb86fc; text-decoration:none; display:flex; align-items:center; gap:6px;">
+                <i class="fa fa-home"></i> Selector
+              </a>
+            </li>
+            <li class="active" style="color:#aaa;">/privacy</li>
+          </ol>
+        </section>
+
+        <section class="content" style="padding:24px;">
+          <div class="row">
+            <div class="col-md-12">
+              <div class="box" style="background:#1e1e1e; border-radius:14px; border:1px solid #2d2d2d; overflow:hidden; box-shadow:0 4px 12px rgba(0,0,0,0.3);">
+                <div class="box-header with-border" style="padding:16px 18px; background:rgba(30,30,30,0.85); border-bottom:1px solid #2a2a2a;">
+                  <h3 class="box-title" style="font-size:1.15rem; font-weight:600; color:#f0f0f0; margin:0;">
+                    Bright Privacy Policy
+                  </h3>
+                  <p style="margin:8px 0 0; color:#aaa; font-size:0.95rem;">
+                    Last updated: <span style="color:#ddd;"><%= (locals.privacyUpdatedAt || "January 5, 2026") %></span>
+                  </p>
+                </div>
+
+                <div class="box-body" style="padding:20px 18px; color:#d8d8d8; line-height:1.6;">
+                  <div class="notice" style="background:#171717; border:1px solid #2a2a2a; border-radius:12px; padding:14px 14px; margin-bottom:16px;">
+                    <b style="color:#f0f0f0;">Quick summary:</b>
+                    <span style="color:#bbb;">
+                      Bright needs basic Discord identifiers and server settings to function. It doesn’t need your diary.
+                    </span>
+                  </div>
+
+                  <h4 style="color:#f0f0f0; font-weight:700; margin-top:0;">1) What we collect</h4>
+                  <ul style="padding-left:18px; margin:10px 0;">
+                    <li><b>Discord identifiers:</b> user IDs, guild IDs, channel IDs, role IDs (needed to apply settings and moderation).</li>
+                    <li><b>Configuration data:</b> dashboard settings you choose (filters, limits, whitelists, toggles, etc.).</li>
+                    <li><b>Moderation metadata:</b> event logs like “message deleted due to invite link,” “bot kicked due to dangerous perms,” timestamps, and related IDs.</li>
+                    <li><b>Authentication:</b> OAuth tokens/sessions required for dashboard login (stored securely server-side where applicable).</li>
+                  </ul>
+
+                  <h4 style="color:#f0f0f0; font-weight:700;">2) What we don’t collect</h4>
+                  <ul style="padding-left:18px; margin:10px 0;">
+                    <li>We don’t “record voice” (unless you build features that do, which is your problem and your disclosure duty).</li>
+                    <li>We don’t need passwords. If you paste one into chat, that’s on you.</li>
+                  </ul>
+
+                  <h4 style="color:#f0f0f0; font-weight:700;">3) How we use data</h4>
+                  <ul style="padding-left:18px; margin:10px 0;">
+                    <li>Operate and provide Bright features (moderation, security, dashboards).</li>
+                    <li>Prevent abuse and investigate incidents (rate limits, anti-nuke triggers).</li>
+                    <li>Improve reliability and performance (basic diagnostics/metrics if enabled).</li>
+                  </ul>
+
+                  <h4 style="color:#f0f0f0; font-weight:700;">4) Data sharing</h4>
+                  <p>
+                    We don’t sell your data. We may share minimal information if required by law, to prevent harm, or with service providers
+                    needed to run Bright (hosting, database, analytics if you use them). Keep your vendor list tidy.
+                  </p>
+
+                  <h4 style="color:#f0f0f0; font-weight:700;">5) Data retention</h4>
+                  <p>
+                    Data is kept only as long as needed to provide the Service and protect it. If you remove Bright from a server,
+                    associated configuration and logs may be deleted after a reasonable period (or immediately, depending on your implementation).
+                  </p>
+
+                  <h4 style="color:#f0f0f0; font-weight:700;">6) Security</h4>
+                  <p>
+                    We take reasonable steps to protect stored data, but no system is magically bulletproof. Use strong admin controls,
+                    restrict dashboard access, and don’t hand out admin roles like candy.
+                  </p>
+
+                  <h4 style="color:#f0f0f0; font-weight:700;">7) Your choices</h4>
+                  <ul style="padding-left:18px; margin:10px 0;">
+                    <li>Server owners control Bright configuration and can disable features that collect/store additional moderation logs.</li>
+                    <li>You can revoke dashboard access by logging out and revoking OAuth authorization in Discord settings.</li>
+                  </ul>
+
+                  <h4 style="color:#f0f0f0; font-weight:700;">8) Contact</h4>
+                  <p style="margin-bottom:0;">
+                    For privacy concerns, contact the Bright operator/admin. If you run Bright, you should publish a support route.
+                    Users can’t contact “the void” and expect it to answer.
+                  </p>
+                </div>
+
+                <div class="box-footer" style="padding:16px 18px; background:rgba(25,25,25,0.9); border-top:1px solid #2a2a2a; display:flex; gap:10px; flex-wrap:wrap;">
+                  <a href="/tos" style="text-decoration:none;">
+                    <button class="btn" style="background:#5865F2; color:#fff; font-weight:600; border:none; border-radius:8px; padding:10px 14px;">
+                      View Terms of Service
+                    </button>
+                  </a>
+                  <a href="/" style="text-decoration:none;">
+                    <button class="btn" style="background:#00b37e; color:#fff; font-weight:600; border:none; border-radius:8px; padding:10px 14px;">
+                      Back to Selector
+                    </button>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <%- include('includes/footer') %>
+    </div>
+
+    <style>
+      .btn:hover { opacity: .92; }
+      h4 { margin-top: 18px; }
+      ul li { margin: 6px 0; }
+    </style>
+  </body>
+</html>
