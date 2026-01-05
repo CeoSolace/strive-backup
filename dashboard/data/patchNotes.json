@@ -1,5 +1,24 @@
 [
   {
+    "date": "2026-01-04",
+    "version": "2.0.0",
+    "title": "Rebrand, new ownership, and policy release",
+    "summary": "Project transition completed with new ownership, branding, and foundational policy releases.",
+    "added": [
+      "Full rebrand following acquisition from original owner",
+      "New ownership structure and resumed active development",
+      "Public /tos endpoint released",
+      "Public /privacy endpoint released"
+    ],
+    "changed": [
+      "Project identity, naming, and public-facing branding",
+      "Internal development roadmap and maintenance ownership"
+    ],
+    "security": [
+      "Formalised Terms of Service and Privacy Policy to clarify data handling, moderation scope, and usage expectations"
+    ]
+  },
+  {
     "date": "2025-12-20",
     "version": "1.5.0",
     "title": "Strive Review + Anti-Nuke security rollout",
