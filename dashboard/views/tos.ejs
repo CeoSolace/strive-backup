@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+  <%- include('includes/head') %>
+
+  <body class="hold-transition skin-dark sidebar-mini">
+    <div class="wrapper" style="background-color:#0f0f0f; color:#e0e0e0;">
+      <%- include('includes/header') %>
+      <%- include('includes/sidebar') %>
+
+      <div class="content-wrapper" style="background-color:#121212;">
+        <section class="content-header" style="padding:20px 24px; border-bottom:1px solid #2a2a2a;">
+          <h1 style="font-weight:700; font-size:1.8rem; color:#f0f0f0; margin:0;">
+            Terms of Service <small style="color:#aaa; font-weight:400;">Bright</small>
+          </h1>
+          <ol class="breadcrumb" style="background:transparent; padding:0; margin-top:8px; font-size:0.95rem;">
+            <li>
+              <a href="/" style="color:#bb86fc; text-decoration:none; display:flex; align-items:center; gap:6px;">
+                <i class="fa fa-home"></i> Selector
+              </a>
+            </li>
+            <li class="active" style="color:#aaa;">/tos</li>
+          </ol>
+        </section>
+
+        <section class="content" style="padding:24px;">
+          <div class="row">
+            <div class="col-md-12">
+              <div class="box" style="background:#1e1e1e; border-radius:14px; border:1px solid #2d2d2d; overflow:hidden; box-shadow:0 4px 12px rgba(0,0,0,0.3);">
+                <div class="box-header with-border" style="padding:16px 18px; background:rgba(30,30,30,0.85); border-bottom:1px solid #2a2a2a;">
+                  <h3 class="box-title" style="font-size:1.15rem; font-weight:600; color:#f0f0f0; margin:0;">
+                    Bright Terms of Service
+                  </h3>
+                  <p style="margin:8px 0 0; color:#aaa; font-size:0.95rem;">
+                    Last updated: <span style="color:#ddd;"><%= (locals.tosUpdatedAt || "January 5, 2026") %></span>
+                  </p>
+                </div>
+
+                <div class="box-body" style="padding:20px 18px; color:#d8d8d8; line-height:1.6;">
+                  <div class="notice" style="background:#171717; border:1px solid #2a2a2a; border-radius:12px; padding:14px 14px; margin-bottom:16px;">
+                    <b style="color:#f0f0f0;">Plain-English version:</b>
+                    <span style="color:#bbb;">
+                      Use Bright legally, don’t abuse it, don’t try to break it, and accept that moderation tools can kick/time out people and bots.
+                    </span>
+                  </div>
+
+                  <h4 style="color:#f0f0f0; font-weight:700; margin-top:0;">1) Agreement</h4>
+                  <p>
+                    By using Bright (the “Service”), you agree to these Terms. If you don’t agree, don’t use the Service.
+                    Revolutionary concept, I know.
+                  </p>
+
+                  <h4 style="color:#f0f0f0; font-weight:700;">2) Eligibility</h4>
+                  <p>
+                    You must be able to legally use Discord and comply with Discord’s own terms and policies. If Discord bans you,
+                    that’s between you and your life choices.
+                  </p>
+
+                  <h4 style="color:#f0f0f0; font-weight:700;">3) What Bright does</h4>
+                  <ul style="padding-left:18px; margin:10px 0;">
+                    <li>Provides moderation/security features (e.g., anti-nuke protections, link filtering, review systems).</li>
+                    <li>May take automated actions like deleting messages, timing out users, derolling roles, or kicking bots/users depending on configuration.</li>
+                    <li>Shows a dashboard to manage settings for servers you have access to.</li>
+                  </ul>
+
+                  <h4 style="color:#f0f0f0; font-weight:700;">4) Server responsibility</h4>
+                  <p>
+                    You (and your server staff) are responsible for how you configure and use Bright. If you set it to punish everything
+                    that moves, that’s on you, not the code.
+                  </p>
+
+                  <h4 style="color:#f0f0f0; font-weight:700;">5) Prohibited use</h4>
+                  <ul style="padding-left:18px; margin:10px 0;">
+                    <li>Using Bright to harass, discriminate, dox, or threaten people.</li>
+                    <li>Attempting to exploit, reverse engineer, bypass protections, or spam the Service.</li>
+                    <li>Using Bright to violate Discord’s rules or applicable laws.</li>
+                    <li>Impersonation, credential theft, or running “security tests” without permission.</li>
+                  </ul>
+
+                  <h4 style="color:#f0f0f0; font-weight:700;">6) Availability and changes</h4>
+                  <p>
+                    The Service may change, break, or be unavailable sometimes. We can update or discontinue features at any time.
+                    We are not obligated to preserve your feelings about feature changes.
+                  </p>
+
+                  <h4 style="color:#f0f0f0; font-weight:700;">7) Termination</h4>
+                  <p>
+                    We may suspend or block access to Bright if there’s abuse, severe risk, or policy violations. We can also remove
+                    Bright from a server at any time.
+                  </p>
+
+                  <h4 style="color:#f0f0f0; font-weight:700;">8) Disclaimers</h4>
+                  <p>
+                    Bright is provided “as is” and “as available.” No guarantees that it catches everything, prevents every nuke, or makes
+                    your server immune to chaos.
+                  </p>
+
+                  <h4 style="color:#f0f0f0; font-weight:700;">9) Limitation of liability</h4>
+                  <p>
+                    To the maximum extent permitted by law, we’re not liable for indirect, incidental, or consequential damages, including
+                    moderation mistakes, lost messages, server incidents, or disruptions.
+                  </p>
+
+                  <h4 style="color:#f0f0f0; font-weight:700;">10) Contact</h4>
+                  <p style="margin-bottom:0;">
+                    For issues, contact the server owner/admin team first. If you operate Bright, provide your preferred support method.
+                    <span style="color:#aaa;">(Yes, you have to actually support your users.)</span>
+                  </p>
+                </div>
+
+                <div class="box-footer" style="padding:16px 18px; background:rgba(25,25,25,0.9); border-top:1px solid #2a2a2a; display:flex; gap:10px; flex-wrap:wrap;">
+                  <a href="/privacy" style="text-decoration:none;">
+                    <button class="btn" style="background:#5865F2; color:#fff; font-weight:600; border:none; border-radius:8px; padding:10px 14px;">
+                      View Privacy Policy
+                    </button>
+                  </a>
+                  <a href="/" style="text-decoration:none;">
+                    <button class="btn" style="background:#00b37e; color:#fff; font-weight:600; border:none; border-radius:8px; padding:10px 14px;">
+                      Back to Selector
+                    </button>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <%- include('includes/footer') %>
+    </div>
+
+    <style>
+      .btn:hover { opacity: .92; }
+      h4 { margin-top: 18px; }
+      ul li { margin: 6px 0; }
+    </style>
+  </body>
+</html>
