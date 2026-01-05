@@ -1,6 +1,7 @@
 const { PermissionsBitField } = require("discord.js");
 
-const DISCORD_LINK_REGEX = /(?:https?:\/\/)?(?:www\.)?(?:discord\.(?:gg|com|me|io|li|link)|discordapp\.com)(?:\/\S*)?/i;
+const DISCORD_LINK_REGEX =
+  /(?:https?:\/\/)?(?:www\.)?(?:discord\.(?:gg|com|me|io|li|link)|discordapp\.com)(?:\/\S*)?/i;
 
 module.exports = (client) => {
   client.on("messageCreate", async (message) => {
@@ -15,7 +16,7 @@ module.exports = (client) => {
       if (DISCORD_LINK_REGEX.test(message.content)) {
         await message.delete().catch(() => {});
         client.logger.warn(
-          `[ANTIDISCORD] Deleted Discord link from bot: ${message.author.tag} (${message.author.id})`
+          `[ANTIBRIGHTDISCORD] Deleted Discord link from bot: ${message.author.tag} (${message.author.id})`
         );
       }
       return; // Bots can't get DMs or timeouts, and are never exempt beyond your bot
@@ -29,23 +30,25 @@ module.exports = (client) => {
         await message.delete().catch(() => {});
 
         if (message.member.moderatable) {
-          await message.member.timeout(10 * 60 * 1000, "Posted Discord invite link").catch(() => {});
+          await message.member
+            .timeout(10 * 60 * 1000, "Posted Discord invite link")
+            .catch(() => {});
         }
 
         await message.author
           .send(
             `⚠️ **Link Removed**\n` +
-            `You sent a Discord invite link in **${message.guild.name}**, which is not allowed.\n` +
-            `Your message was deleted and you've been timed out for 10 minutes.\n` +
-            `If this was a mistake, contact a server moderator.`
+              `You sent a Discord invite link in **${message.guild.name}**, which is not allowed.\n` +
+              `Your message was deleted and you've been timed out for 10 minutes.\n` +
+              `If this was a mistake, contact a server moderator.`
           )
           .catch(() => {});
 
         client.logger.warn(
-          `[ANTIDISCORD] Removed Discord link from ${message.author.tag} (${message.author.id}) in #${message.channel.name} (${message.guild.name})`
+          `[ANTIBRIGHTDISCORD] Removed Discord link from ${message.author.tag} (${message.author.id}) in #${message.channel.name} (${message.guild.name})`
         );
       } catch (err) {
-        client.logger.error("[ANTIDISCORD] Enforcement failed:", err);
+        client.logger.error("[ANTIBRIGHTDISCORD] Enforcement failed:", err);
       }
     }
   });
