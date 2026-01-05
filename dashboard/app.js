@@ -14,7 +14,8 @@ module.exports.launch = async (client) => {
     discordAPIRouter = require("./routes/discord"),
     logoutRouter = require("./routes/logout"),
     guildManagerRouter = require("./routes/guild-manager"),
-    newsRouter = require("./routes/news"); // ✅ NEW
+    newsRouter = require("./routes/news"), // ✅ NEW
+    healthRouter = require("./routes/health"); // ✅ NEW
 
   client.states = {};
   client.config = config;
@@ -62,17 +63,27 @@ module.exports.launch = async (client) => {
 
       next();
     })
+
+    // ✅ Health check (no auth, no redirects, no EJS pages)
+    // Put this BEFORE "/" and BEFORE your 404/500 handlers.
+    .get("/health", healthRouter(client, db))
+
+    // routes
     .use("/api", discordAPIRouter)
     .use("/logout", logoutRouter)
     .use("/manage", guildManagerRouter)
-    .use("/news", newsRouter) // ✅ NEW route
+    .use("/news", newsRouter)
     .use("/", mainRouter)
+
+    // 404
     .use(CheckAuth, (req, res) => {
       res.status(404).render("404", {
         user: req.userInfos,
         currentURL: `${req.protocol}://${req.get("host")}${req.originalUrl}`,
       });
     })
+
+    // 500
     .use(CheckAuth, (err, req, res, next) => {
       console.error(err.stack);
       if (!req.user) return res.redirect("/");
