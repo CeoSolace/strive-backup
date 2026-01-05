@@ -1,9 +1,9 @@
 // antinuke.js (discord.js v14)
-// Strive Review ONLY (no anti-bot-add gate)
+// Bright Review ONLY (no anti-bot-add gate)
 //
 // ✅ If a bot has dangerous perms (on JOIN or later via role update):
 //    - kick first
-//    - create #strive-review if missing
+//    - create #bright-review if missing
 //    - send embed pinging owner with Accept / Deny buttons
 // ✅ Accept => bot is allowed to rejoin in future even with dangerous perms
 // ✅ Deny   => bot is blocked (kicked every time)
@@ -31,16 +31,16 @@ module.exports = (client) => {
   const ENTRY_MAX_AGE = 12_000;
 
   const EXTRA_WHITELIST_ID = "1400281740978815118";
-  const STRIVE_REVIEW_CHANNEL_NAME = "strive-review";
+  const BRIGHT_REVIEW_CHANNEL_NAME = "bright-review";
 
   // Dedupe to stop triple panels from cascaded events
-  const STRIVE_DEDUPE_MS = 60_000;
+  const BRIGHT_DEDUPE_MS = 60_000;
 
   // Anti mass role removal ("anti-massrole delete")
   const ROLE_STRIP_WINDOW = 180_000; // ~3 minutes
   const ROLE_STRIP_THRESHOLD = 5;
 
-  // Bot perms that trigger Strive Review kick
+  // Bot perms that trigger Bright Review kick
   const BOT_DANGEROUS_PERMS = [
     PermissionsBitField.Flags.Administrator,
     PermissionsBitField.Flags.ManageGuild,
@@ -76,7 +76,7 @@ module.exports = (client) => {
   // anti-nuke actor cache: `${guildId}:${userId}` -> counters
   const actorCache = new Collection();
 
-  // Strive review:
+  // Bright review:
   // pending: guildId -> Map(botId -> info)
   const pendingBotReview = new Collection();
   // approved: guildId -> Set(botId)
@@ -84,8 +84,8 @@ module.exports = (client) => {
   // denied: guildId -> Set(botId)
   const deniedBots = new Collection();
 
-  // Strive dedupe: `${guildId}:${botId}` -> lastPostedAt
-  const striveDedupe = new Collection();
+  // Bright dedupe: `${guildId}:${botId}` -> lastPostedAt
+  const brightDedupe = new Collection();
 
   // Human mass-role-strip counters: `${guildId}:${executorId}` -> { count, lastAction }
   const roleStripCache = new Collection();
@@ -128,8 +128,8 @@ module.exports = (client) => {
       if (now - data.lastAction > ROLE_STRIP_WINDOW) roleStripCache.delete(key);
     }
 
-    for (const [key, t] of striveDedupe.entries()) {
-      if (now - t > STRIVE_DEDUPE_MS) striveDedupe.delete(key);
+    for (const [key, t] of brightDedupe.entries()) {
+      if (now - t > BRIGHT_DEDUPE_MS) brightDedupe.delete(key);
     }
   }, 30_000);
 
@@ -290,9 +290,9 @@ module.exports = (client) => {
     }
   }
 
-  async function ensureStriveReviewChannel(guild) {
+  async function ensureBrightReviewChannel(guild) {
     const existing = guild.channels.cache.find(
-      (c) => c.type === ChannelType.GuildText && c.name === STRIVE_REVIEW_CHANNEL_NAME
+      (c) => c.type === ChannelType.GuildText && c.name === BRIGHT_REVIEW_CHANNEL_NAME
     );
 
     if (existing && existing.permissionsFor(guild.members.me)?.has("SendMessages")) return existing;
@@ -323,9 +323,9 @@ module.exports = (client) => {
       }
 
       const ch = await guild.channels.create({
-        name: STRIVE_REVIEW_CHANNEL_NAME,
+        name: BRIGHT_REVIEW_CHANNEL_NAME,
         type: ChannelType.GuildText,
-        reason: "Strive Review approvals channel",
+        reason: "Bright Review approvals channel",
         permissionOverwrites: overwrites,
       });
 
@@ -341,13 +341,13 @@ module.exports = (client) => {
 
   function makeReviewButtons(guildId, botId, disabled = false) {
     const accept = new ButtonBuilder()
-      .setCustomId(`strive:accept:${guildId}:${botId}`)
+      .setCustomId(`bright:accept:${guildId}:${botId}`)
       .setLabel("Accept")
       .setStyle(ButtonStyle.Success)
       .setDisabled(disabled);
 
     const deny = new ButtonBuilder()
-      .setCustomId(`strive:deny:${guildId}:${botId}`)
+      .setCustomId(`bright:deny:${guildId}:${botId}`)
       .setLabel("Deny")
       .setStyle(ButtonStyle.Danger)
       .setDisabled(disabled);
@@ -357,13 +357,13 @@ module.exports = (client) => {
 
   function makeHumanReviewButtons(guildId, userId, disabled = false) {
     const restore = new ButtonBuilder()
-      .setCustomId(`strive:restore:${guildId}:${userId}`)
+      .setCustomId(`bright:restore:${guildId}:${userId}`)
       .setLabel("Restore Roles")
       .setStyle(ButtonStyle.Success)
       .setDisabled(disabled);
 
     const keep = new ButtonBuilder()
-      .setCustomId(`strive:keep:${guildId}:${userId}`)
+      .setCustomId(`bright:keep:${guildId}:${userId}`)
       .setLabel("Keep Derolled")
       .setStyle(ButtonStyle.Danger)
       .setDisabled(disabled);
@@ -371,7 +371,7 @@ module.exports = (client) => {
     return new ActionRowBuilder().addComponents(restore, keep);
   }
 
-  async function postStriveReviewPanel({
+  async function postBrightReviewPanel({
     guild,
     botId,
     botTag,
@@ -381,7 +381,7 @@ module.exports = (client) => {
     perms,
     origin,
   }) {
-    const reviewChannel = await ensureStriveReviewChannel(guild);
+    const reviewChannel = await ensureBrightReviewChannel(guild);
     if (!reviewChannel) return;
 
     const ownerPing = `<@${ownerId}>`;
@@ -389,7 +389,7 @@ module.exports = (client) => {
     const permsLine = perms?.length ? perms.join(", ") : "(unknown)";
 
     const embed = new EmbedBuilder()
-      .setTitle("🚨 Strive Review: Bot Kicked")
+      .setTitle("🚨 Bright Review: Bot Kicked")
       .setDescription(
         `${ownerPing}\n\n` +
           `A bot was **kicked first** to prevent damage because it had **dangerous permissions**.\n\n` +
@@ -422,7 +422,7 @@ module.exports = (client) => {
   }
 
   async function postHumanReviewPanel({ guild, targetUser, executor, reason, removedRoles }) {
-    const reviewChannel = await ensureStriveReviewChannel(guild);
+    const reviewChannel = await ensureBrightReviewChannel(guild);
     if (!reviewChannel) return;
 
     const ownerId = guild.ownerId;
@@ -434,7 +434,7 @@ module.exports = (client) => {
         : "(none)";
 
     const embed = new EmbedBuilder()
-      .setTitle("🚨 Strive Review: Mass Role Removal Detected")
+      .setTitle("🚨 Bright Review: Mass Role Removal Detected")
       .setDescription(
         `${ownerPing}\n\n` +
           `A user appears to be stripping roles quickly. As a precaution, they were **derolled** (not kicked).\n\n` +
@@ -464,7 +464,7 @@ module.exports = (client) => {
       .catch(() => {});
   }
 
-  async function triggerStriveReviewKickFirst({
+  async function triggerBrightReviewKickFirst({
     guild,
     botMember,
     adderOrExecutor,
@@ -475,9 +475,9 @@ module.exports = (client) => {
 
     // ---- DEDUPE: avoid multi-panels from cascading events ----
     const dk = `${guild.id}:${botId}`;
-    const last = striveDedupe.get(dk) ?? 0;
-    if (Date.now() - last < STRIVE_DEDUPE_MS) return;
-    striveDedupe.set(dk, Date.now());
+    const last = brightDedupe.get(dk) ?? 0;
+    if (Date.now() - last < BRIGHT_DEDUPE_MS) return;
+    brightDedupe.set(dk, Date.now());
     // ---------------------------------------------------------
 
     const botTag = botMember.user?.tag ?? "UnknownBot";
@@ -497,13 +497,13 @@ module.exports = (client) => {
 
     // KICK FIRST (your requirement)
     if (botMember.kickable) {
-      await botMember.kick(`Strive Review: ${reason}`).catch(() => {});
+      await botMember.kick(`Bright Review: ${reason}`).catch(() => {});
     } else {
-      await botMember.roles.set([], `Strive Review: ${reason}`).catch(() => {});
+      await botMember.roles.set([], `Bright Review: ${reason}`).catch(() => {});
     }
 
     // Then post review embed + buttons + owner ping
-    await postStriveReviewPanel({
+    await postBrightReviewPanel({
       guild,
       botId,
       botTag,
@@ -552,7 +552,7 @@ module.exports = (client) => {
     const parts = interaction.customId.split(":");
     if (parts.length !== 4) return;
     const [ns, action, guildId, targetId] = parts;
-    if (ns !== "strive") return;
+    if (ns !== "bright") return;
 
     const guild = interaction.guild;
     if (!guild || guild.id !== guildId) {
@@ -636,7 +636,9 @@ module.exports = (client) => {
       const info = pending.get(userId);
 
       if (!info) {
-        await interaction.reply({ content: "ℹ️ No pending human review found.", ephemeral: true }).catch(() => {});
+        await interaction
+          .reply({ content: "ℹ️ No pending human review found.", ephemeral: true })
+          .catch(() => {});
         return;
       }
 
@@ -654,7 +656,10 @@ module.exports = (client) => {
 
         try {
           const managed = targetMember.roles.cache.filter((r) => r.managed).map((r) => r.id);
-          await targetMember.roles.set([...new Set([...managed, ...valid])], "Strive Review: restore roles");
+          await targetMember.roles.set(
+            [...new Set([...managed, ...valid])],
+            "Bright Review: restore roles"
+          );
         } catch {}
 
         pending.delete(userId);
@@ -710,8 +715,8 @@ module.exports = (client) => {
           `• \`=removewhitelist <@user|id>\`\n` +
           `• \`=removewhitelist <@user|id> for <scopes...>\`\n\n` +
           `**Scopes**: \`roles\`, \`channels\`, \`webhooks\`, \`bans\`, \`admin\`, \`all\`\n\n` +
-          `**Strive Review**\n` +
-          `Bots with dangerous perms are kicked and an owner ping + Accept/Deny buttons are posted in #${STRIVE_REVIEW_CHANNEL_NAME}.\n` +
+          `**Bright Review**\n` +
+          `Bots with dangerous perms are kicked and an owner ping + Accept/Deny buttons are posted in #${BRIGHT_REVIEW_CHANNEL_NAME}.\n` +
           `Humans stripping roles fast get derolled + owner review panel (Restore/Keep).\n`
       );
       return;
@@ -803,7 +808,7 @@ module.exports = (client) => {
   });
 
   // =========================
-  // STRIVE REVIEW ENFORCEMENT
+  // BRIGHT REVIEW ENFORCEMENT
   // =========================
 
   // On bot join: if denied -> kick+review; if approved -> allow; else if dangerous -> kick+review
@@ -814,12 +819,12 @@ module.exports = (client) => {
 
     if (isBotDenied(guild.id, member.id)) {
       const adder = await getBotAdder(guild, member);
-      await triggerStriveReviewKickFirst({
+      await triggerBrightReviewKickFirst({
         guild,
         botMember: member,
         adderOrExecutor: adder,
         origin: "JOIN",
-        reason: "Bot is DENIED in Strive Review (blocked from re-adding).",
+        reason: "Bot is DENIED in Bright Review (blocked from re-adding).",
       });
       return;
     }
@@ -828,7 +833,7 @@ module.exports = (client) => {
 
     if (hasDangerousGuildPerms(member)) {
       const adder = await getBotAdder(guild, member);
-      await triggerStriveReviewKickFirst({
+      await triggerBrightReviewKickFirst({
         guild,
         botMember: member,
         adderOrExecutor: adder,
@@ -850,16 +855,16 @@ module.exports = (client) => {
     if (newMember.user.bot) {
       // Ignore cascade updates right after we acted
       const pend = getPendingMap(guild.id).get(newMember.id);
-      if (pend && Date.now() - pend.at < STRIVE_DEDUPE_MS) return;
+      if (pend && Date.now() - pend.at < BRIGHT_DEDUPE_MS) return;
 
       if (isBotDenied(guild.id, newMember.id)) {
         const executor = await getAuditExecutor(guild, AuditLogEvent.MemberRoleUpdate, newMember.id);
-        await triggerStriveReviewKickFirst({
+        await triggerBrightReviewKickFirst({
           guild,
           botMember: newMember,
           adderOrExecutor: executor,
           origin: "ROLE_UPDATE",
-          reason: "Bot is DENIED in Strive Review (blocked from re-adding).",
+          reason: "Bot is DENIED in Bright Review (blocked from re-adding).",
         });
         return;
       }
@@ -874,7 +879,7 @@ module.exports = (client) => {
 
       if (hasDangerousGuildPerms(newMember)) {
         const executor = await getAuditExecutor(guild, AuditLogEvent.MemberRoleUpdate, newMember.id);
-        await triggerStriveReviewKickFirst({
+        await triggerBrightReviewKickFirst({
           guild,
           botMember: newMember,
           adderOrExecutor: executor,
