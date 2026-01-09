@@ -1,158 +1,442 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title><%= user ? "Dashboard" : "Welcome" %></title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= user ? "Redirecting..." : "Welcome" %></title>
 
-    <!-- STRIVE STYLE -->
-    <style>
-        :root {
-            --accent: #5865F2;
-            --accent-glow: rgba(88, 101, 242, 0.35);
-            --bg-dark: #0d0f17;
-            --bg-card: #151823;
-            --text-main: #fff;
-            --text-muted: #a5adc9;
-        }
+  <% if (user) { %>
+    <!-- If logged in, send them to selector instantly -->
+    <meta http-equiv="refresh" content="0; url=/selector" />
+  <% } %>
 
-        body {
-            margin: 0;
-            font-family: "Inter", sans-serif;
-            background: var(--bg-dark);
-            color: var(--text-main);
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
+  <style>
+    :root{
+      --accent:#5865F2;
+      --accent2:#8B5CF6;
+      --good:#22c55e;
+      --bg:#0b0d14;
+      --bg2:#0f1220;
+      --card:#121527;
+      --text:#eef2ff;
+      --muted:#a5adc9;
+      --stroke:rgba(255,255,255,.08);
+      --shadow: 0 18px 50px rgba(0,0,0,.55);
+      --shadow2: 0 10px 28px rgba(0,0,0,.35);
+      --radius: 18px;
+      --radius2: 14px;
+      --max: 1100px;
+    }
 
-        /* GLOW EFFECT */
-        .glow {
-            position: absolute;
-            width: 500px;
-            height: 500px;
-            background: var(--accent);
-            filter: blur(180px);
-            opacity: 0.15;
-            top: -150px;
-            right: -150px;
-            pointer-events: none;
-        }
+    *{ box-sizing:border-box; }
+    html,body{ height:100%; }
+    body{
+      margin:0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background:
+        radial-gradient(1200px 700px at 90% -10%, rgba(88,101,242,.25), transparent 60%),
+        radial-gradient(900px 600px at 10% 10%, rgba(139,92,246,.16), transparent 60%),
+        radial-gradient(900px 600px at 50% 110%, rgba(34,197,94,.10), transparent 55%),
+        linear-gradient(180deg, var(--bg), var(--bg2));
+      color: var(--text);
+      overflow-x:hidden;
+      display:flex;
+      flex-direction:column;
+      min-height:100vh;
+    }
 
-        header {
-            text-align: center;
-            padding: 120px 20px 80px;
-            position: relative;
-        }
+    /* subtle grid overlay */
+    body:before{
+      content:"";
+      position:fixed;
+      inset:0;
+      background:
+        linear-gradient(to right, rgba(255,255,255,.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255,255,255,.03) 1px, transparent 1px);
+      background-size: 44px 44px;
+      mask-image: radial-gradient(650px 420px at 50% 15%, rgba(0,0,0,.9), transparent 70%);
+      pointer-events:none;
+      opacity:.55;
+    }
 
-        h1 {
-            font-size: 58px;
-            font-weight: 800;
-            letter-spacing: -1px;
-            margin-bottom: 20px;
-        }
+    .wrap{
+      width:100%;
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 28px 18px 40px;
+      position:relative;
+      z-index:1;
+    }
 
-        p.subtitle {
-            max-width: 620px;
-            margin: 0 auto;
-            font-size: 18px;
-            color: var(--text-muted);
-            line-height: 1.6;
-        }
+    .topbar{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:14px;
+      padding: 10px 4px 18px;
+    }
 
-        .btn {
-            display: inline-block;
-            margin-top: 40px;
-            padding: 16px 42px;
-            border-radius: 12px;
-            text-decoration: none;
-            font-size: 20px;
-            font-weight: 600;
-            transition: 0.25s ease;
-        }
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      text-decoration:none;
+      color: var(--text);
+    }
+    .logo{
+      width:40px;
+      height:40px;
+      border-radius: 12px;
+      background:
+        radial-gradient(circle at 30% 30%, rgba(255,255,255,.18), transparent 50%),
+        linear-gradient(135deg, var(--accent), var(--accent2));
+      box-shadow: 0 0 0 1px var(--stroke), 0 12px 30px rgba(88,101,242,.18);
+    }
+    .brand strong{
+      font-size: 14px;
+      letter-spacing: .3px;
+    }
+    .brand span{
+      display:block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
 
-        .btn-login {
-            background: var(--accent);
-            color: #fff;
-            box-shadow: 0 0 16px var(--accent-glow);
-        }
-        .btn-login:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 0 28px var(--accent-glow);
-        }
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding: 10px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--stroke);
+      background: rgba(18,21,39,.55);
+      color: var(--muted);
+      font-size: 12px;
+      text-decoration:none;
+      backdrop-filter: blur(10px);
+    }
+    .dot{
+      width:8px;
+      height:8px;
+      border-radius: 50%;
+      background: var(--good);
+      box-shadow: 0 0 0 4px rgba(34,197,94,.12);
+    }
 
-        .btn-dashboard {
-            background: #1db954;
-            color: #fff;
-            box-shadow: 0 0 16px rgba(29, 185, 84, 0.35);
-        }
-        .btn-dashboard:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 0 28px rgba(29, 185, 84, 0.4);
-        }
+    .hero{
+      display:grid;
+      grid-template-columns: 1.05fr .95fr;
+      gap: 18px;
+      align-items: stretch;
+      margin-top: 10px;
+    }
 
-        .logout {
-            margin-top: 20px;
-            display: block;
-            font-size: 14px;
-            color: var(--text-muted);
-        }
+    .card{
+      background: linear-gradient(180deg, rgba(18,21,39,.92), rgba(18,21,39,.72));
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+      position:relative;
+    }
 
-        footer {
-            margin-top: auto;
-            text-align: center;
-            padding: 40px;
-            color: #565f7a;
-            font-size: 14px;
-        }
+    .card:before{
+      content:"";
+      position:absolute;
+      inset:-2px;
+      background: radial-gradient(700px 240px at 20% 0%, rgba(88,101,242,.22), transparent 60%);
+      pointer-events:none;
+    }
 
-        .avatar {
-            width: 90px;
-            height: 90px;
-            border-radius: 50%;
-            margin-bottom: 20px;
-            border: 3px solid var(--accent);
-            box-shadow: 0 0 20px var(--accent-glow);
-        }
-    </style>
+    .card-inner{
+      position:relative;
+      padding: 26px;
+    }
+
+    h1{
+      margin: 0 0 10px;
+      font-size: clamp(34px, 4vw, 56px);
+      line-height: 1.05;
+      letter-spacing: -1px;
+    }
+
+    .subtitle{
+      margin: 0;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.65;
+      max-width: 56ch;
+    }
+
+    .actions{
+      display:flex;
+      flex-wrap:wrap;
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .btn{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:10px;
+      padding: 13px 16px;
+      border-radius: 14px;
+      border: 1px solid var(--stroke);
+      text-decoration:none;
+      font-weight: 700;
+      color: var(--text);
+      background: rgba(255,255,255,.04);
+      box-shadow: var(--shadow2);
+      transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background .18s ease;
+      min-width: 190px;
+      user-select:none;
+    }
+    .btn:hover{
+      transform: translateY(-2px);
+      border-color: rgba(255,255,255,.14);
+      background: rgba(255,255,255,.06);
+    }
+    .btn:active{ transform: translateY(0px); }
+    .btn:focus-visible{
+      outline:none;
+      box-shadow: 0 0 0 4px rgba(88,101,242,.25), var(--shadow2);
+    }
+
+    .btn-primary{
+      border-color: rgba(88,101,242,.35);
+      background: linear-gradient(135deg, rgba(88,101,242,.95), rgba(139,92,246,.75));
+      box-shadow: 0 18px 45px rgba(88,101,242,.18);
+    }
+    .btn-primary:hover{
+      box-shadow: 0 22px 58px rgba(88,101,242,.24);
+    }
+
+    .btn-secondary{
+      border-color: rgba(34,197,94,.32);
+      background: linear-gradient(135deg, rgba(34,197,94,.85), rgba(34,197,94,.45));
+      box-shadow: 0 18px 45px rgba(34,197,94,.14);
+    }
+
+    .mini{
+      display:flex;
+      gap: 12px;
+      margin-top: 18px;
+      color: var(--muted2);
+      font-size: 13px;
+      flex-wrap:wrap;
+    }
+    .mini a{
+      color: var(--muted);
+      text-decoration:none;
+      border-bottom: 1px dashed rgba(255,255,255,.22);
+    }
+    .mini a:hover{ color: var(--text); border-bottom-color: rgba(255,255,255,.4); }
+
+    .side{
+      display:flex;
+      flex-direction:column;
+      gap: 12px;
+    }
+
+    .panel{
+      background: linear-gradient(180deg, rgba(18,21,39,.85), rgba(18,21,39,.55));
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow2);
+      padding: 18px;
+      position:relative;
+      overflow:hidden;
+      min-height: 150px;
+    }
+
+    .panel h3{
+      margin: 0 0 10px;
+      font-size: 14px;
+      letter-spacing: .2px;
+      color: rgba(238,242,255,.92);
+      display:flex;
+      align-items:center;
+      gap: 10px;
+    }
+
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      font-size: 12px;
+      color: var(--muted);
+      border: 1px solid var(--stroke);
+      background: rgba(255,255,255,.03);
+      padding: 8px 10px;
+      border-radius: 12px;
+    }
+
+    .feat{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .feat .item{
+      border: 1px solid var(--stroke);
+      background: rgba(255,255,255,.03);
+      border-radius: var(--radius2);
+      padding: 10px 10px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .feat .item b{ color: var(--text); display:block; margin-bottom: 3px; font-size: 13px; }
+
+    footer{
+      margin-top:auto;
+      padding: 26px 0 30px;
+      color: rgba(165,173,201,.65);
+      font-size: 13px;
+      text-align:center;
+      position:relative;
+      z-index:1;
+    }
+
+    /* Redirect state */
+    .redirect{
+      max-width: 760px;
+      margin: 18vh auto 0;
+      padding: 0 18px;
+      position:relative;
+      z-index:2;
+      text-align:center;
+    }
+    .spinner{
+      width: 46px;
+      height: 46px;
+      border-radius: 999px;
+      border: 3px solid rgba(255,255,255,.12);
+      border-top-color: rgba(88,101,242,.95);
+      margin: 0 auto 16px;
+      animation: spin .9s linear infinite;
+      box-shadow: 0 0 30px rgba(88,101,242,.18);
+    }
+    @keyframes spin{ to{ transform: rotate(360deg); } }
+
+    @media (max-width: 900px){
+      .hero{ grid-template-columns: 1fr; }
+      .btn{ width: 100%; min-width: unset; }
+      .feat{ grid-template-columns: 1fr; }
+    }
+  </style>
 </head>
+
 <body>
 
-<div class="glow"></div>
+<% if (user) { %>
+  <div class="redirect">
+    <div class="spinner"></div>
+    <h1 style="margin:0 0 8px; font-size: 34px; letter-spacing:-.8px;">Taking you to the Selector</h1>
+    <p class="subtitle" style="margin:0 auto; max-width: 52ch;">
+      You’re logged in, so there’s no reason to stand here staring at a landing page.
+    </p>
+    <div class="actions" style="justify-content:center; margin-top:16px;">
+      <a class="btn btn-primary" href="/selector">Continue</a>
+      <a class="btn" href="/logout">Log out</a>
+    </div>
 
-<header>
+    <script>
+      // Client-side redirect (faster than meta refresh in some browsers)
+      window.location.replace("/selector");
+    </script>
+  </div>
 
-    <% if (user) { %>
+<% } else { %>
 
-        <% if (user.avatar) { %>
-            <img class="avatar" src="https://cdn.discordapp.com/avatars/<%= user.id %>/<%= user.avatar %>.png" />
-        <% } %>
+  <div class="wrap">
+    <div class="topbar">
+      <a class="brand" href="/">
+        <div class="logo"></div>
+        <div>
+          <strong>Bright Dashboard</strong>
+          <span>Control panel for your bot</span>
+        </div>
+      </a>
 
-        <h1>Welcome back, <%= user.username %>!</h1>
-        <p class="subtitle">
-            Manage servers, configure features, and customize your bot experience.
-        </p>
+      <a class="pill" href="/api/login">
+        <span class="dot"></span>
+        Discord Login
+      </a>
+    </div>
 
-        <a href="/selector" class="btn btn-dashboard">Go to Dashboard</a>
-        <a href="/logout" class="logout">Log out</a>
+    <div class="hero">
+      <section class="card">
+        <div class="card-inner">
+          <h1>Meet your next Discord dashboard.</h1>
+          <p class="subtitle">
+            Configure features, manage servers, and keep control of your bot without the UI looking like it was built in 2017.
+          </p>
 
-    <% } else { %>
+          <div class="actions">
+            <a class="btn btn-primary" href="/api/login">Login with Discord</a>
+            <a class="btn" href="/privacy">Privacy</a>
+            <a class="btn" href="/tos">Terms</a>
+          </div>
 
-        <h1>Meet Your Next Discord Dashboard</h1>
-        <p class="subtitle">
-            Powerful tools. Modern UI. Full control over your bot — beautifully packed in one place.
-        </p>
+          <div class="mini">
+            <span>Secure OAuth</span>
+            <span>•</span>
+            <span>No pointless clutter</span>
+            <span>•</span>
+            <span><a href="/api/login">Get started</a></span>
+          </div>
+        </div>
+      </section>
 
-        <a href="/api/login" class="btn btn-login">Login with Discord</a>
+      <aside class="side">
+        <div class="panel">
+          <h3>
+            <span style="width:10px;height:10px;border-radius:50%;background:rgba(88,101,242,.95);box-shadow:0 0 0 4px rgba(88,101,242,.14);display:inline-block;"></span>
+            What you can do
+          </h3>
 
-    <% } %>
+          <div class="feat">
+            <div class="item">
+              <b>Server Selector</b>
+              Pick a guild and jump straight into settings.
+            </div>
+            <div class="item">
+              <b>Feature Toggles</b>
+              Enable modules without breaking your own server.
+            </div>
+            <div class="item">
+              <b>Cleaner UI</b>
+              Dark-first design with sane spacing.
+            </div>
+            <div class="item">
+              <b>Fast Access</b>
+              Less clicking, more configuring.
+            </div>
+          </div>
+        </div>
 
-</header>
+        <div class="panel">
+          <h3>
+            <span style="width:10px;height:10px;border-radius:50%;background:rgba(34,197,94,.95);box-shadow:0 0 0 4px rgba(34,197,94,.12);display:inline-block;"></span>
+            Status
+          </h3>
+          <div class="badge">Dashboard online • <%= new Date().toLocaleString() %></div>
+          <p style="margin:12px 0 0; color: var(--muted); font-size: 13px; line-height:1.6;">
+            Login to see servers you can manage and configure Bright properly.
+          </p>
+        </div>
+      </aside>
+    </div>
 
-<footer>
-    © <%= new Date().getFullYear() %> Your Dashboard. All Rights Reserved.
-</footer>
+    <footer>
+      © <%= new Date().getFullYear() %> Bright Dashboard. All Rights Reserved.
+    </footer>
+  </div>
+
+<% } %>
 
 </body>
 </html>
