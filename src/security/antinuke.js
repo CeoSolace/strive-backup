@@ -28,6 +28,7 @@ module.exports = (client) => {
   const WINDOW = 30_000;
   const ENTRY_MAX_AGE = 12_000;
 
+  // Bot owner/admin (hardcoded)
   const EXTRA_WHITELIST_ID = "1414726263112732775";
 
   const BRIGHT_REVIEW_CHANNEL_NAME = "bright-review";
@@ -126,6 +127,9 @@ module.exports = (client) => {
 
   // Scoped whitelist: guildId -> Map(userId -> Set(scopes))
   const whitelist = new Collection();
+
+  // Whitelist managers: guildId -> Set(userId)
+  const wlManagers = new Collection();
 
   // anti-nuke actor cache: `${guildId}:${userId}` -> counters
   const actorCache = new Collection();
@@ -237,6 +241,18 @@ module.exports = (client) => {
   function getWhitelistMap(guildId) {
     if (!whitelist.has(guildId)) whitelist.set(guildId, new Map());
     return whitelist.get(guildId);
+  }
+
+  function getWlManagerSet(guildId) {
+    if (!wlManagers.has(guildId)) wlManagers.set(guildId, new Set());
+    return wlManagers.get(guildId);
+  }
+
+  function isWlManager(guild, user) {
+    if (!guild || !user) return false;
+    if (user.id === guild.ownerId || user.id === EXTRA_WHITELIST_ID) return true;
+    const set = wlManagers.get(guild.id);
+    return set ? set.has(user.id) : false;
   }
 
   function normalizeScopes(scopes) {
@@ -1141,11 +1157,13 @@ module.exports = (client) => {
           `Expires: <t:${Math.floor((capsule.expiresAt ?? Date.now()) / 1000)}:R>\n` +
           `\`\`\`txt\nthreat:${b64}\n\`\`\``;
 
-        await logMsg.edit({
-          content,
-          embeds: logMsg.embeds,
-          components: logMsg.components,
-        }).catch(() => {});
+        await logMsg
+          .edit({
+            content,
+            embeds: logMsg.embeds,
+            components: logMsg.components,
+          })
+          .catch(() => {});
       }
 
       async function appendActionToLog(actionLabel) {
@@ -1160,10 +1178,12 @@ module.exports = (client) => {
         const base = logMsg.embeds?.[0] ? EmbedBuilder.from(logMsg.embeds[0]) : new EmbedBuilder();
         base.setFooter({ text: `Last action: ${actionLabel} by ${interaction.user.tag}` }).setTimestamp(Date.now());
 
-        await logMsg.edit({
-          embeds: [base],
-          components: logMsg.components,
-        }).catch(() => {});
+        await logMsg
+          .edit({
+            embeds: [base],
+            components: logMsg.components,
+          })
+          .catch(() => {});
 
         await writeThreatCapsuleBack(logMsg, capsule);
       }
@@ -1195,9 +1215,9 @@ module.exports = (client) => {
         capsule.actions.push({ by: interaction.user.id, at: Date.now(), action: "Ignored" });
 
         const base = logMsg.embeds?.[0] ? EmbedBuilder.from(logMsg.embeds[0]) : new EmbedBuilder();
-        base
-          .addFields({ name: "Status", value: `✅ Ignored by <@${interaction.user.id}>`, inline: false })
-          .setTimestamp(Date.now());
+        base.addFields({ name: "Status", value: `✅ Ignored by <@${interaction.user.id}>`, inline: false }).setTimestamp(
+          Date.now()
+        );
 
         await logMsg
           .edit({
@@ -1266,7 +1286,9 @@ module.exports = (client) => {
         // Timeout helpers
         async function doTimeout(ms, label) {
           if (!member.moderatable) {
-            await interaction.reply({ content: "⚠️ Cannot timeout this member (hierarchy/perms).", ephemeral: true }).catch(() => {});
+            await interaction
+              .reply({ content: "⚠️ Cannot timeout this member (hierarchy/perms).", ephemeral: true })
+              .catch(() => {});
             return;
           }
           await member.timeout(ms, reason).catch(() => {});
@@ -1493,6 +1515,11 @@ module.exports = (client) => {
     const tokens = content.split(/\s+/);
     const cmd = tokens[0].toLowerCase();
 
+    const isOwnerOrAdmin =
+      message.author.id === message.guild.ownerId || message.author.id === EXTRA_WHITELIST_ID;
+
+    const canManageWhitelist = isWlManager(message.guild, message.author);
+
     if (cmd === "=help") {
       await message.reply(
         `**Anti-nuke commands**\n` +
@@ -1504,6 +1531,10 @@ module.exports = (client) => {
           `• \`=removewhitelist <@user|id>\`\n` +
           `• \`=removewhitelist <@user|id> for <scopes...>\`\n` +
           `• \`=removewhitelist <@user|id> <scopes...>\` *(no "for" needed)*\n\n` +
+          `**Whitelist manager**\n` +
+          `• \`=wlman add <@user|id>\`\n` +
+          `• \`=wlman remove <@user|id>\`\n` +
+          `• \`=wlman list\`\n\n` +
           `**Scopes**:\n` +
           `• \`roles\`, \`channels\`, \`webhooks\`, \`bans\`, \`admin\`\n` +
           `• \`restore\` (can use restore buttons)\n` +
@@ -1518,8 +1549,55 @@ module.exports = (client) => {
       return;
     }
 
-    const isOwnerOrAdmin =
-      message.author.id === message.guild.ownerId || message.author.id === EXTRA_WHITELIST_ID;
+    // =========================
+    // WHITELIST MANAGERS
+    // =========================
+    if (cmd === "=wlman") {
+      if (!isOwnerOrAdmin) {
+        await message.reply("⚠️ Only the server owner / bot admin can manage whitelist managers.");
+        return;
+      }
+
+      const sub = (tokens[1] || "").toLowerCase();
+
+      if (sub === "list") {
+        const set = wlManagers.get(message.guild.id) ?? new Set();
+        if (set.size === 0) return void (await message.reply("✅ No whitelist managers set."));
+        const lines = [...set.values()].map((id) => `• <@${id}> (\`${id}\`)`);
+        await message.reply(`✅ Whitelist managers:\n${lines.join("\n")}`);
+        return;
+      }
+
+      if (sub !== "add" && sub !== "remove") {
+        await message.reply(
+          `**Whitelist manager commands**\n` +
+            `• \`=wlman add <@user|id>\`\n` +
+            `• \`=wlman remove <@user|id>\`\n` +
+            `• \`=wlman list\``
+        );
+        return;
+      }
+
+      const target = message.mentions.users.first() || (await safeFetchUser(message.client, tokens[2]));
+      if (!target) {
+        await message.reply("⚠️ Invalid user ID/mention.");
+        return;
+      }
+
+      const set = getWlManagerSet(message.guild.id);
+
+      if (sub === "add") {
+        set.add(target.id);
+        await message.reply(`✅ Added **${target.tag}** as a whitelist manager.`);
+        return;
+      }
+
+      if (sub === "remove") {
+        set.delete(target.id);
+        await message.reply(`✅ Removed **${target.tag}** from whitelist managers.`);
+        return;
+      }
+    }
 
     if (cmd === "=whitelist" && tokens[1]?.toLowerCase() === "list") {
       const map = whitelist.get(message.guild.id) ?? new Map();
@@ -1532,13 +1610,12 @@ module.exports = (client) => {
 
     if (cmd !== "=whitelist" && cmd !== "=removewhitelist") return;
 
-    if (!isOwnerOrAdmin) {
-      await message.reply("⚠️ Only the server owner / bot admin can manage the whitelist.");
+    if (!canManageWhitelist) {
+      await message.reply("⚠️ You are not allowed to manage the whitelist.");
       return;
     }
 
-    const target =
-      message.mentions.users.first() || (await safeFetchUser(message.client, tokens[1]));
+    const target = message.mentions.users.first() || (await safeFetchUser(message.client, tokens[1]));
 
     if (!target) {
       await message.reply("⚠️ Invalid user ID/mention.");
