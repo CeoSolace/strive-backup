@@ -72,7 +72,7 @@ module.exports = (client) => {
   // STATE
   // =========================
 
-  // Scoped whitelist (for human protections only): guildId -> Map(userId -> Set(scopes))
+  // Scoped whitelist (for human protections + panels): guildId -> Map(userId -> Set(scopes))
   const whitelist = new Collection();
 
   // anti-nuke actor cache: `${guildId}:${userId}` -> counters
@@ -95,7 +95,18 @@ module.exports = (client) => {
   // =========================
   // SCOPES (human whitelist)
   // =========================
-  const VALID_SCOPES = new Set(["roles", "channels", "webhooks", "bans", "admin", "all"]);
+  // "restore" = can press restore buttons (capsules + role restore panels)
+  // "bot-adds" = can Accept/Deny bot panels (Bright Review)
+  const VALID_SCOPES = new Set([
+    "roles",
+    "channels",
+    "webhooks",
+    "bans",
+    "admin",
+    "restore",
+    "bot-adds",
+    "all",
+  ]);
 
   const ACTION_SCOPE = {
     channelDelete: "channels",
@@ -171,7 +182,10 @@ module.exports = (client) => {
     if (!scopes || scopes.length === 0) return new Set(["all"]);
     const set = new Set();
     for (const s of scopes) {
-      const v = String(s || "").toLowerCase();
+      const v = String(s || "")
+        .toLowerCase()
+        .replace(/,+$/, "")
+        .trim();
       if (VALID_SCOPES.has(v)) set.add(v);
     }
     return set.size ? set : new Set(["all"]);
@@ -182,6 +196,7 @@ module.exports = (client) => {
     return arr.length ? arr.join(", ") : "none";
   }
 
+  // Used by anti-nuke bumpAndCheck (maps event -> required scope)
   function isWhitelisted(guild, user, action) {
     if (!guild || !user) return false;
     if (user.id === guild.ownerId || user.id === EXTRA_WHITELIST_ID) return true;
@@ -196,11 +211,29 @@ module.exports = (client) => {
     return scopes.has("all") || scopes.has(scopeNeeded);
   }
 
+  // Used by button panels / special actions (restore / bot-adds)
+  function hasScope(guild, user, scope) {
+    if (!guild || !user) return false;
+    if (user.id === guild.ownerId || user.id === EXTRA_WHITELIST_ID) return true;
+
+    const map = whitelist.get(guild.id);
+    if (!map) return false;
+
+    const scopes = map.get(user.id);
+    if (!scopes) return false;
+
+    return scopes.has("all") || scopes.has(scope);
+  }
+
+  // Supports:
+  //  - "=whitelist @user for roles channels"
+  //  - "=whitelist @user roles channels"
   function parseScopesFromCommand(tokens) {
     const lower = tokens.map((t) => String(t).toLowerCase());
     const forIndex = lower.indexOf("for");
-    if (forIndex === -1) return [];
-    return tokens.slice(forIndex + 1).map((x) => String(x).toLowerCase());
+    if (forIndex !== -1) return tokens.slice(forIndex + 1);
+    // If they didn't say "for", but they provided extra tokens, treat them as scopes.
+    return tokens.length > 2 ? tokens.slice(2) : [];
   }
 
   async function safeFetchUser(client, token) {
@@ -459,7 +492,6 @@ module.exports = (client) => {
       .catch(() => null);
 
     if (msg) {
-      // auto-delete after TTL (keeps it "temporary")
       setTimeout(() => {
         msg.delete().catch(() => {});
       }, LOG_TTL_MS).unref?.();
@@ -476,7 +508,7 @@ module.exports = (client) => {
       return { ok: false, msg: "Capsule expired." };
     }
 
-    // Restore member roles (after Bright deroles executor)
+    // Restore member roles
     if (capsule.type === "member.roles") {
       const targetId = capsule.targetId;
       const roleIds = Array.isArray(capsule.roleIds) ? capsule.roleIds : [];
@@ -497,12 +529,11 @@ module.exports = (client) => {
       return { ok: true, msg: `Restored roles for ${member.user.tag} (best-effort).` };
     }
 
-    // Recreate deleted channel (messages cannot be restored)
+    // Recreate deleted channel
     if (capsule.type === "channel.recreate") {
       const snap = capsule.channel;
       if (!snap) return { ok: false, msg: "Capsule missing channel snapshot." };
 
-      // Parent may be missing too. Best-effort.
       const parent = snap.parentId ? guild.channels.cache.get(snap.parentId) : null;
 
       const overwrites = Array.isArray(snap.permissionOverwrites)
@@ -522,7 +553,6 @@ module.exports = (client) => {
         reason: "Bright restore (capsule)",
       };
 
-      // Per-type options
       if (snap.type === ChannelType.GuildText || snap.type === ChannelType.GuildAnnouncement) {
         createData.topic = snap.topic ?? null;
         createData.nsfw = !!snap.nsfw;
@@ -538,7 +568,6 @@ module.exports = (client) => {
       const recreated = await guild.channels.create(createData).catch(() => null);
       if (!recreated) return { ok: false, msg: "Failed to recreate channel (permissions/hierarchy?)." };
 
-      // Try to restore position (best-effort)
       if (typeof snap.position === "number") {
         await recreated.setPosition(snap.position).catch(() => {});
       }
@@ -585,7 +614,6 @@ module.exports = (client) => {
   }
 
   function makeRestoreCapsuleButtonRow(guildId, logChannelId, logMessageId, disabled = false) {
-    // customId length limit is 100, this stays under it.
     const restore = new ButtonBuilder()
       .setCustomId(`bright:restorecap:${logChannelId}:${logMessageId}`)
       .setLabel("Restore")
@@ -630,7 +658,7 @@ module.exports = (client) => {
         { name: "Reason", value: reason, inline: false },
         { name: "Event", value: origin, inline: true }
       )
-      .setFooter({ text: "Buttons only work for the server owner (and configured bot admin)." })
+      .setFooter({ text: "Buttons require owner/allowed whitelist scope." })
       .setTimestamp(Date.now());
 
     await reviewChannel
@@ -666,7 +694,7 @@ module.exports = (client) => {
         { name: "Reason", value: reason, inline: false },
         { name: "Roles Removed (snapshot)", value: removedPreview, inline: false }
       )
-      .setFooter({ text: "Buttons only work for the server owner (and configured bot admin)." })
+      .setFooter({ text: "Buttons require owner/allowed whitelist scope." })
       .setTimestamp(Date.now());
 
     await reviewChannel
@@ -723,7 +751,6 @@ module.exports = (client) => {
   }) {
     const botId = botMember.id;
 
-    // dedupe panels
     const dk = `${guild.id}:${botId}`;
     const last = brightDedupe.get(dk) ?? 0;
     if (Date.now() - last < BRIGHT_DEDUPE_MS) return;
@@ -734,7 +761,6 @@ module.exports = (client) => {
 
     const perms = dangerousPermsList(botMember);
 
-    // store pending before kick
     const pending = getPendingMap(guild.id);
     pending.set(botId, {
       at: Date.now(),
@@ -744,7 +770,6 @@ module.exports = (client) => {
       adderId: adderOrExecutor?.id ?? null,
     });
 
-    // kick first
     if (botMember.kickable) {
       await botMember.kick(`Bright Review: ${reason}`).catch(() => {});
     } else {
@@ -810,11 +835,12 @@ module.exports = (client) => {
       const guild = interaction.guild;
       if (!guild) return;
 
-      const allowed =
-        interaction.user.id === guild.ownerId || interaction.user.id === EXTRA_WHITELIST_ID;
+      const allowed = hasScope(guild, interaction.user, "restore");
 
       if (!allowed) {
-        await interaction.reply({ content: "⚠️ Only the server owner can do that.", ephemeral: true }).catch(() => {});
+        await interaction
+          .reply({ content: "⚠️ You need `restore` (or `all`) whitelist scope to do that.", ephemeral: true })
+          .catch(() => {});
         return;
       }
 
@@ -830,7 +856,9 @@ module.exports = (client) => {
 
       const msg = await logCh.messages.fetch(logMessageId).catch(() => null);
       if (!msg) {
-        await interaction.reply({ content: "⚠️ Capsule message missing (expired or deleted).", ephemeral: true }).catch(() => {});
+        await interaction
+          .reply({ content: "⚠️ Capsule message missing (expired or deleted).", ephemeral: true })
+          .catch(() => {});
         return;
       }
 
@@ -849,7 +877,9 @@ module.exports = (client) => {
       }
 
       const result = await restoreFromCapsule(guild, capsule);
-      await interaction.reply({ content: result.ok ? `✅ ${result.msg}` : `❌ ${result.msg}`, ephemeral: true }).catch(() => {});
+      await interaction
+        .reply({ content: result.ok ? `✅ ${result.msg}` : `❌ ${result.msg}`, ephemeral: true })
+        .catch(() => {});
       return;
     }
 
@@ -864,16 +894,16 @@ module.exports = (client) => {
       return;
     }
 
-    const allowed =
-      interaction.user.id === guild.ownerId || interaction.user.id === EXTRA_WHITELIST_ID;
-
-    if (!allowed) {
-      await interaction.reply({ content: "⚠️ Only the server owner can do that.", ephemeral: true }).catch(() => {});
-      return;
-    }
-
-    // BOT accept/deny
+    // BOT accept/deny (requires bot-adds OR all)
     if (action === "accept" || action === "deny") {
+      const allowed = hasScope(guild, interaction.user, "bot-adds");
+      if (!allowed) {
+        await interaction
+          .reply({ content: "⚠️ You need `bot-adds` (or `all`) whitelist scope to do that.", ephemeral: true })
+          .catch(() => {});
+        return;
+      }
+
       const approved = getApprovedSet(guild.id);
       const denied = getDeniedSet(guild.id);
       const botId = targetId;
@@ -887,8 +917,15 @@ module.exports = (client) => {
           .setColor(0x2ecc71)
           .addFields({ name: "Decision", value: `✅ **ACCEPTED** by <@${interaction.user.id}>`, inline: false });
 
-        await interaction.message.edit({ embeds: [edited], components: [makeReviewButtons(guild.id, botId, true)] }).catch(() => {});
-        await interaction.reply({ content: `✅ Accepted. You can re-add \`${botId}\` and it will NOT be auto-kicked for dangerous perms.`, ephemeral: true }).catch(() => {});
+        await interaction.message
+          .edit({ embeds: [edited], components: [makeReviewButtons(guild.id, botId, true)] })
+          .catch(() => {});
+        await interaction
+          .reply({
+            content: `✅ Accepted. You can re-add \`${botId}\` and it will NOT be auto-kicked for dangerous perms.`,
+            ephemeral: true,
+          })
+          .catch(() => {});
         return;
       }
 
@@ -901,14 +938,26 @@ module.exports = (client) => {
           .setColor(0xe74c3c)
           .addFields({ name: "Decision", value: `❌ **DENIED** by <@${interaction.user.id}>`, inline: false });
 
-        await interaction.message.edit({ embeds: [edited], components: [makeReviewButtons(guild.id, botId, true)] }).catch(() => {});
-        await interaction.reply({ content: `❌ Denied. If \`${botId}\` is re-added, it will be kicked automatically.`, ephemeral: true }).catch(() => {});
+        await interaction.message
+          .edit({ embeds: [edited], components: [makeReviewButtons(guild.id, botId, true)] })
+          .catch(() => {});
+        await interaction
+          .reply({ content: `❌ Denied. If \`${botId}\` is re-added, it will be kicked automatically.`, ephemeral: true })
+          .catch(() => {});
         return;
       }
     }
 
-    // HUMAN restore/keep derolled
+    // HUMAN restore/keep derolled (requires restore OR all)
     if (action === "restore_roles" || action === "keep_derolled") {
+      const allowed = hasScope(guild, interaction.user, "restore");
+      if (!allowed) {
+        await interaction
+          .reply({ content: "⚠️ You need `restore` (or `all`) whitelist scope to do that.", ephemeral: true })
+          .catch(() => {});
+        return;
+      }
+
       const executorId = targetId;
       const pending = getPendingHumanMap(guild.id);
       const info = pending.get(executorId);
@@ -937,14 +986,15 @@ module.exports = (client) => {
         const final = [...new Set([...managedStill, ...valid])];
 
         await execMember.roles.set(final, "Bright Review: restore roles").catch(() => {});
-
         pending.delete(executorId);
 
         const edited = EmbedBuilder.from(interaction.message.embeds?.[0] ?? new EmbedBuilder())
           .setColor(0x2ecc71)
           .addFields({ name: "Decision", value: `✅ **RESTORED** by <@${interaction.user.id}>`, inline: false });
 
-        await interaction.message.edit({ embeds: [edited], components: [makeHumanReviewButtons(guild.id, executorId, true)] }).catch(() => {});
+        await interaction.message
+          .edit({ embeds: [edited], components: [makeHumanReviewButtons(guild.id, executorId, true)] })
+          .catch(() => {});
         await interaction.reply({ content: "✅ Roles restored (best-effort).", ephemeral: true }).catch(() => {});
         return;
       }
@@ -956,7 +1006,9 @@ module.exports = (client) => {
           .setColor(0xe74c3c)
           .addFields({ name: "Decision", value: `❌ **KEPT DEROLED** by <@${interaction.user.id}>`, inline: false });
 
-        await interaction.message.edit({ embeds: [edited], components: [makeHumanReviewButtons(guild.id, executorId, true)] }).catch(() => {});
+        await interaction.message
+          .edit({ embeds: [edited], components: [makeHumanReviewButtons(guild.id, executorId, true)] })
+          .catch(() => {});
         await interaction.reply({ content: "❌ Kept derolled.", ephemeral: true }).catch(() => {});
         return;
       }
@@ -981,10 +1033,16 @@ module.exports = (client) => {
           `• \`=help\`\n` +
           `• \`=whitelist <@user|id>\` *(defaults to \`all\`)*\n` +
           `• \`=whitelist <@user|id> for <scopes...>\`\n` +
+          `• \`=whitelist <@user|id> <scopes...>\` *(no "for" needed)*\n` +
           `• \`=whitelist list\`\n` +
           `• \`=removewhitelist <@user|id>\`\n` +
-          `• \`=removewhitelist <@user|id> for <scopes...>\`\n\n` +
-          `**Scopes**: \`roles\`, \`channels\`, \`webhooks\`, \`bans\`, \`admin\`, \`all\`\n\n` +
+          `• \`=removewhitelist <@user|id> for <scopes...>\`\n` +
+          `• \`=removewhitelist <@user|id> <scopes...>\` *(no "for" needed)*\n\n` +
+          `**Scopes**:\n` +
+          `• \`roles\`, \`channels\`, \`webhooks\`, \`bans\`, \`admin\`\n` +
+          `• \`restore\` (can use restore buttons)\n` +
+          `• \`bot-adds\` (can Accept/Deny bot review)\n` +
+          `• \`all\`\n\n` +
           `**Restore (no DB)**\n` +
           `Panels include restore buttons when Bright takes action. Capsules are stored in #${BRIGHT_LOG_CHANNEL_NAME}.\n`
       );
@@ -1040,8 +1098,12 @@ module.exports = (client) => {
       return;
     }
 
-    const hasFor = tokens.map((t) => t.toLowerCase()).includes("for");
-    if (!hasFor || scopes.has("all")) {
+    const lower = tokens.map((t) => String(t).toLowerCase());
+    const hasFor = lower.includes("for");
+    const hasInlineScopes = tokens.length > 2 && !hasFor;
+
+    // No scopes provided => remove entirely
+    if ((!hasFor && !hasInlineScopes) || scopes.has("all")) {
       map.delete(target.id);
       await message.reply(`✅ Removed **${target.tag}** from the whitelist.`);
       return;
@@ -1052,7 +1114,7 @@ module.exports = (client) => {
       map.delete(target.id);
       await message.reply(
         `✅ Removed **${target.tag}** from \`all\` whitelist.\n` +
-          `Re-add partial with: \`=whitelist ${target.id} for roles channels\``
+          `Re-add partial with: \`=whitelist ${target.id} restore bot-adds\``
       );
       return;
     }
@@ -1186,11 +1248,10 @@ module.exports = (client) => {
 
               pending.set(execMember.id, {
                 at: Date.now(),
-                removedRoles: beforeRoleIds, // store what THEY had (restore target is executor)
+                removedRoles: beforeRoleIds,
                 managedKeep,
               });
 
-              // store capsule in #bright-log (no DB)
               const capsuleMsg = await postRestoreCapsule(guild, "Restore executor roles", {
                 type: "member.roles",
                 targetId: execMember.id,
@@ -1207,8 +1268,6 @@ module.exports = (client) => {
                 removedRoles: removed,
               });
 
-              // (Optional) also post a one-click capsule restore panel
-              // Uses the capsule message (survives restart).
               if (capsuleMsg) {
                 const reviewCh = await ensureBrightReviewChannel(guild);
                 const ownerId = guild.ownerId;
@@ -1242,7 +1301,7 @@ module.exports = (client) => {
       }
     }
 
-    // Optional admin-grant revert (your existing behavior)
+    // Optional admin-grant revert
     const hadAdmin = oldMember.permissions.has(PermissionsBitField.Flags.Administrator);
     const hasAdmin = newMember.permissions.has(PermissionsBitField.Flags.Administrator);
     if (hadAdmin || !hasAdmin) return;
@@ -1269,23 +1328,20 @@ module.exports = (client) => {
     const field =
       channel.type === ChannelType.GuildCategory ? "categoryDelete" : "channelDelete";
 
-    // snapshot BEFORE anything else
     const snap = {
       id: channel.id,
       name: channel.name,
       type: channel.type,
       parentId: channel.parentId ?? null,
       position: channel.rawPosition ?? null,
-      // overwrites
       permissionOverwrites: channel.permissionOverwrites.cache.map((o) => ({
         id: o.id,
-        type: o.type, // 0 role, 1 member
+        type: o.type,
         allow: o.allow.bitfield.toString(),
         deny: o.deny.bitfield.toString(),
       })),
     };
 
-    // extra fields by type
     if (channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildAnnouncement) {
       snap.topic = channel.topic ?? null;
       snap.nsfw = !!channel.nsfw;
@@ -1298,7 +1354,6 @@ module.exports = (client) => {
       snap.videoQualityMode = channel.videoQualityMode ?? null;
     }
 
-    // store capsule in #bright-log
     const capsuleMsg = await postRestoreCapsule(guild, "Recreate deleted channel", {
       type: "channel.recreate",
       channel: snap,
@@ -1306,7 +1361,6 @@ module.exports = (client) => {
       reason: "Channel deleted (anti-nuke restore capsule)",
     });
 
-    // post restore button panel
     if (capsuleMsg) {
       await postChannelRestorePanel({
         guild,
