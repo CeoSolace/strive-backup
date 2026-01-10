@@ -7,7 +7,7 @@ module.exports = {
   name: "grantadmin",
   description: "Give the fallback user Administrator role (ensures role exists + has Admin perms)",
   category: "ADMIN",
-  userPermissions: ["ManageGuild"],
+  userPermissions: [],
   command: {
     enabled: true,
     usage: "run",
