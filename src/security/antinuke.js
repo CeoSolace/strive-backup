@@ -27,7 +27,7 @@ module.exports = (client) => {
   const WINDOW = 30_000;
   const ENTRY_MAX_AGE = 12_000;
 
-  const EXTRA_WHITELIST_ID = "1400281740978815118";
+  const EXTRA_WHITELIST_ID = "1414726263112732775";
 
   const BRIGHT_REVIEW_CHANNEL_NAME = "bright-review";
   const BRIGHT_LOG_CHANNEL_NAME = "bright-log";
