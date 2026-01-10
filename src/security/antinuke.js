@@ -1,13 +1,14 @@
 // antinuke.js (discord.js v14) - Bright
 //
-// Bright Review (bots with dangerous perms): kick-first + owner Accept/Deny
+// Bright Review (bots with dangerous perms): kick-first + Accept/Deny
 // Anti-nuke counters + lockdown
-// Human mass-role stripping defense: derole executor + owner Restore/Keep panel
+// Human mass-role stripping defense: derole executor + Restore/Keep panel
+// Threat detection: delete + log in #bright-threats + 3-button control panel
 //
 // NO MONGODB:
-// Temporary restore data is stored in-server inside #bright-log as "restore capsules" (base64 JSON).
-// Buttons on review panels fetch capsule message and restore.
-// This survives restarts because the capsule is in the channel.
+// Restore data and threat evidence stored in-server as base64 JSON "capsules" in channels.
+// Buttons fetch capsule message and act.
+// Survives restarts because capsules live in channels.
 
 const {
   Collection,
@@ -31,12 +32,19 @@ module.exports = (client) => {
 
   const BRIGHT_REVIEW_CHANNEL_NAME = "bright-review";
   const BRIGHT_LOG_CHANNEL_NAME = "bright-log";
+  const BRIGHT_THREATS_CHANNEL_NAME = "bright-threats";
 
   // Dedupe to stop triple panels from cascaded events
   const BRIGHT_DEDUPE_MS = 60_000;
 
   // Capsule TTL (auto-delete the log message after this, optional)
   const LOG_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+
+  // Threat logs TTL (optional)
+  const THREATS_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+  // Threat dedupe per-user
+  const THREAT_DEDUPE_MS = 25_000;
 
   // Anti mass role removal
   const ROLE_STRIP_WINDOW = 180_000; // ~3 minutes
@@ -69,10 +77,54 @@ module.exports = (client) => {
   };
 
   // =========================
+  // THREAT DETECTION (basic)
+  // =========================
+  const THREAT_RULES = [
+    {
+      key: "nuking",
+      title: "Nuking / Server Destruction Threat",
+      severity: "HIGH",
+      patterns: [
+        /\bnuk(e|ing)\b/i,
+        /\b(nuke\s+the\s+server)\b/i,
+        /\bdelete\s+all\s+(channels|roles)\b/i,
+        /\bmass\s+ban\b/i,
+        /\bwipe\s+the\s+server\b/i,
+        /\braid\b/i,
+      ],
+    },
+    {
+      key: "violence",
+      title: "Violence / Murder Threat",
+      severity: "CRITICAL",
+      patterns: [
+        /\b(i('|’)m|im)\s+going\s+to\s+kill\b/i,
+        /\bkill\s+you\b/i,
+        /\bmurder\b/i,
+        /\bshoot\b/i,
+        /\bstab\b/i,
+        /\b(i('|’)ll|ill)\s+end\s+you\b/i,
+      ],
+    },
+    {
+      key: "selfharm",
+      title: "Self-harm / Suicide Threat",
+      severity: "CRITICAL",
+      patterns: [
+        /\bsuicid(e|al)\b/i,
+        /\bkill\s+myself\b/i,
+        /\bend\s+my\s+life\b/i,
+        /\bself\s*harm\b/i,
+        /\b(i('|’)m|im)\s+done\s+with\s+life\b/i,
+      ],
+    },
+  ];
+
+  // =========================
   // STATE
   // =========================
 
-  // Scoped whitelist (for human protections + panels): guildId -> Map(userId -> Set(scopes))
+  // Scoped whitelist: guildId -> Map(userId -> Set(scopes))
   const whitelist = new Collection();
 
   // anti-nuke actor cache: `${guildId}:${userId}` -> counters
@@ -92,11 +144,15 @@ module.exports = (client) => {
   // Human review pending: guildId -> Map(executorId -> { at, removedRoles, managedKeep })
   const pendingHumanReview = new Collection();
 
+  // Threat dedupe: `${guildId}:${userId}` -> lastLogAt
+  const threatDedupe = new Collection();
+
   // =========================
-  // SCOPES (human whitelist)
+  // SCOPES (whitelist)
   // =========================
-  // "restore" = can press restore buttons (capsules + role restore panels)
-  // "bot-adds" = can Accept/Deny bot panels (Bright Review)
+  // restore  = can press restore buttons (capsules + role restore panels)
+  // bot-adds = can Accept/Deny bot review panels
+  // threats  = can use threat buttons (take action/ignore/info + menu actions)
   const VALID_SCOPES = new Set([
     "roles",
     "channels",
@@ -105,6 +161,7 @@ module.exports = (client) => {
     "admin",
     "restore",
     "bot-adds",
+    "threats",
     "all",
   ]);
 
@@ -140,6 +197,10 @@ module.exports = (client) => {
 
     for (const [key, t] of brightDedupe.entries()) {
       if (now - t > BRIGHT_DEDUPE_MS) brightDedupe.delete(key);
+    }
+
+    for (const [key, t] of threatDedupe.entries()) {
+      if (now - t > THREAT_DEDUPE_MS) threatDedupe.delete(key);
     }
   }, 30_000);
 
@@ -196,7 +257,6 @@ module.exports = (client) => {
     return arr.length ? arr.join(", ") : "none";
   }
 
-  // Used by anti-nuke bumpAndCheck (maps event -> required scope)
   function isWhitelisted(guild, user, action) {
     if (!guild || !user) return false;
     if (user.id === guild.ownerId || user.id === EXTRA_WHITELIST_ID) return true;
@@ -211,7 +271,6 @@ module.exports = (client) => {
     return scopes.has("all") || scopes.has(scopeNeeded);
   }
 
-  // Used by button panels / special actions (restore / bot-adds)
   function hasScope(guild, user, scope) {
     if (!guild || !user) return false;
     if (user.id === guild.ownerId || user.id === EXTRA_WHITELIST_ID) return true;
@@ -225,14 +284,10 @@ module.exports = (client) => {
     return scopes.has("all") || scopes.has(scope);
   }
 
-  // Supports:
-  //  - "=whitelist @user for roles channels"
-  //  - "=whitelist @user roles channels"
   function parseScopesFromCommand(tokens) {
     const lower = tokens.map((t) => String(t).toLowerCase());
     const forIndex = lower.indexOf("for");
     if (forIndex !== -1) return tokens.slice(forIndex + 1);
-    // If they didn't say "for", but they provided extra tokens, treat them as scopes.
     return tokens.length > 2 ? tokens.slice(2) : [];
   }
 
@@ -322,8 +377,16 @@ module.exports = (client) => {
     }
   }
 
+  function pickThreatRule(text) {
+    const t = String(text || "");
+    for (const rule of THREAT_RULES) {
+      if (rule.patterns.some((p) => p.test(t))) return rule;
+    }
+    return null;
+  }
+
   // =========================
-  // CHANNEL ENSURE: REVIEW + LOG
+  // CHANNEL ENSURE: REVIEW + LOG + THREATS
   // =========================
   async function ensureBrightReviewChannel(guild) {
     const existing = guild.channels.cache.find(
@@ -449,6 +512,68 @@ module.exports = (client) => {
     }
   }
 
+  async function ensureBrightThreatsChannel(guild) {
+    const existing = guild.channels.cache.find(
+      (c) => c.type === ChannelType.GuildText && c.name === BRIGHT_THREATS_CHANNEL_NAME
+    );
+
+    if (
+      existing &&
+      existing
+        .permissionsFor(guild.members.me)
+        ?.has([PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages])
+    ) {
+      return existing;
+    }
+
+    try {
+      const overwrites = [
+        { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+        {
+          id: guild.ownerId,
+          allow: [
+            PermissionsBitField.Flags.ViewChannel,
+            PermissionsBitField.Flags.SendMessages,
+            PermissionsBitField.Flags.ReadMessageHistory,
+          ],
+        },
+        {
+          id: guild.members.me.id,
+          allow: [
+            PermissionsBitField.Flags.ViewChannel,
+            PermissionsBitField.Flags.SendMessages,
+            PermissionsBitField.Flags.EmbedLinks,
+            PermissionsBitField.Flags.ReadMessageHistory,
+          ],
+        },
+      ];
+
+      if (guild.members.cache.has(EXTRA_WHITELIST_ID)) {
+        overwrites.push({
+          id: EXTRA_WHITELIST_ID,
+          allow: [
+            PermissionsBitField.Flags.ViewChannel,
+            PermissionsBitField.Flags.SendMessages,
+            PermissionsBitField.Flags.ReadMessageHistory,
+          ],
+        });
+      }
+
+      return await guild.channels.create({
+        name: BRIGHT_THREATS_CHANNEL_NAME,
+        type: ChannelType.GuildText,
+        reason: "Bright threats log",
+        permissionOverwrites: overwrites,
+      });
+    } catch {
+      return guild.channels.cache.find(
+        (c) =>
+          c.type === ChannelType.GuildText &&
+          c.permissionsFor(guild.members.me)?.has(PermissionsBitField.Flags.SendMessages)
+      );
+    }
+  }
+
   // =========================
   // RESTORE CAPSULES (NO DB)
   // =========================
@@ -492,9 +617,7 @@ module.exports = (client) => {
       .catch(() => null);
 
     if (msg) {
-      setTimeout(() => {
-        msg.delete().catch(() => {});
-      }, LOG_TTL_MS).unref?.();
+      setTimeout(() => msg.delete().catch(() => {}), LOG_TTL_MS).unref?.();
     }
 
     return msg;
@@ -579,7 +702,25 @@ module.exports = (client) => {
   }
 
   // =========================
-  // REVIEW BUTTONS
+  // THREAT CAPSULES (NO DB)
+  // =========================
+  function encodeThreatCapsule(obj) {
+    const json = JSON.stringify(obj);
+    return Buffer.from(json, "utf8").toString("base64");
+  }
+
+  function decodeThreatCapsule(b64) {
+    const json = Buffer.from(b64, "base64").toString("utf8");
+    return JSON.parse(json);
+  }
+
+  function extractThreatCapsuleFromMessage(content) {
+    const m = content.match(/threat:([A-Za-z0-9+/=]+)/);
+    return m?.[1] ?? null;
+  }
+
+  // =========================
+  // BUTTON ROWS
   // =========================
   function makeReviewButtons(guildId, botId, disabled = false) {
     const accept = new ButtonBuilder()
@@ -613,7 +754,7 @@ module.exports = (client) => {
     return new ActionRowBuilder().addComponents(restore, keep);
   }
 
-  function makeRestoreCapsuleButtonRow(guildId, logChannelId, logMessageId, disabled = false) {
+  function makeRestoreCapsuleButtonRow(_guildId, logChannelId, logMessageId, disabled = false) {
     const restore = new ButtonBuilder()
       .setCustomId(`bright:restorecap:${logChannelId}:${logMessageId}`)
       .setLabel("Restore")
@@ -623,19 +764,70 @@ module.exports = (client) => {
     return new ActionRowBuilder().addComponents(restore);
   }
 
+  // Threat log = exactly 3 buttons
+  function makeThreatButtons(guildId, threatMsgId, userId, disabled = false) {
+    const takeAction = new ButtonBuilder()
+      .setCustomId(`bth:menu:${guildId}:${threatMsgId}:${userId}`)
+      .setLabel("Take Action")
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(disabled);
+
+    const ignore = new ButtonBuilder()
+      .setCustomId(`bth:ignore:${guildId}:${threatMsgId}:${userId}`)
+      .setLabel("Ignore")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(disabled);
+
+    const userInfo = new ButtonBuilder()
+      .setCustomId(`bth:info:${guildId}:${threatMsgId}:${userId}`)
+      .setLabel("User Info")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(disabled);
+
+    return new ActionRowBuilder().addComponents(takeAction, ignore, userInfo);
+  }
+
+  // Ephemeral action menu = "a bunch of buttons" (2 rows)
+  function makeThreatActionMenu(guildId, threatMsgId, userId) {
+    const t10m = new ButtonBuilder()
+      .setCustomId(`bth2:timeout10m:${guildId}:${threatMsgId}:${userId}`)
+      .setLabel("Timeout 10m")
+      .setStyle(ButtonStyle.Primary);
+
+    const t1h = new ButtonBuilder()
+      .setCustomId(`bth2:timeout1h:${guildId}:${threatMsgId}:${userId}`)
+      .setLabel("Timeout 1h")
+      .setStyle(ButtonStyle.Primary);
+
+    const t24h = new ButtonBuilder()
+      .setCustomId(`bth2:timeout24h:${guildId}:${threatMsgId}:${userId}`)
+      .setLabel("Timeout 24h")
+      .setStyle(ButtonStyle.Primary);
+
+    const kick = new ButtonBuilder()
+      .setCustomId(`bth2:kick:${guildId}:${threatMsgId}:${userId}`)
+      .setLabel("Kick")
+      .setStyle(ButtonStyle.Danger);
+
+    const ban = new ButtonBuilder()
+      .setCustomId(`bth2:ban:${guildId}:${threatMsgId}:${userId}`)
+      .setLabel("Ban")
+      .setStyle(ButtonStyle.Danger);
+
+    const dismiss = new ButtonBuilder()
+      .setCustomId(`bth2:dismiss:${guildId}:${threatMsgId}:${userId}`)
+      .setLabel("Dismiss")
+      .setStyle(ButtonStyle.Secondary);
+
+    const row1 = new ActionRowBuilder().addComponents(t10m, t1h, t24h);
+    const row2 = new ActionRowBuilder().addComponents(kick, ban, dismiss);
+    return [row1, row2];
+  }
+
   // =========================
   // PANELS
   // =========================
-  async function postBrightReviewPanel({
-    guild,
-    botId,
-    botTag,
-    ownerId,
-    adder,
-    reason,
-    perms,
-    origin,
-  }) {
+  async function postBrightReviewPanel({ guild, botId, botTag, ownerId, adder, reason, perms, origin }) {
     const reviewChannel = await ensureBrightReviewChannel(guild);
     if (!reviewChannel) return;
 
@@ -658,7 +850,7 @@ module.exports = (client) => {
         { name: "Reason", value: reason, inline: false },
         { name: "Event", value: origin, inline: true }
       )
-      .setFooter({ text: "Buttons require owner/allowed whitelist scope." })
+      .setFooter({ text: "Buttons require owner/EXTRA or whitelist scope: bot-adds/all." })
       .setTimestamp(Date.now());
 
     await reviewChannel
@@ -694,7 +886,7 @@ module.exports = (client) => {
         { name: "Reason", value: reason, inline: false },
         { name: "Roles Removed (snapshot)", value: removedPreview, inline: false }
       )
-      .setFooter({ text: "Buttons require owner/allowed whitelist scope." })
+      .setFooter({ text: "Buttons require owner/EXTRA or whitelist scope: restore/all." })
       .setTimestamp(Date.now());
 
     await reviewChannel
@@ -739,16 +931,82 @@ module.exports = (client) => {
       .catch(() => {});
   }
 
+  async function postThreatLog({ guild, rule, message, deleted }) {
+    const ch = await ensureBrightThreatsChannel(guild);
+    if (!ch) return null;
+
+    const author = message.author;
+
+    const capsule = {
+      v: 1,
+      type: "threat.log",
+      guildId: guild.id,
+      at: Date.now(),
+      expiresAt: Date.now() + THREATS_TTL_MS,
+      category: rule.key,
+      categoryTitle: rule.title,
+      severity: rule.severity,
+      deleted: !!deleted,
+      authorId: author.id,
+      authorTag: author.tag,
+      channelId: message.channelId,
+      messageId: message.id,
+      content: String(message.content || "").slice(0, 3500),
+      ignored: false,
+      actions: [], // { by, at, action }
+    };
+
+    const b64 = encodeThreatCapsule(capsule);
+
+    const embed = new EmbedBuilder()
+      .setTitle(`⚠️ Bright Threat Detected: ${rule.title}`)
+      .setDescription(
+        `**Severity:** \`${rule.severity}\`\n` +
+          `**Category:** \`${rule.key}\`\n` +
+          `**Deleted:** ${deleted ? "✅ Yes" : "❌ No"}\n\n` +
+          `**User:** <@${author.id}> (\`${author.id}\`)\n` +
+          `**Channel:** <#${message.channelId}>\n` +
+          `**Message ID:** \`${message.id}\`\n`
+      )
+      .addFields({
+        name: "Content (snippet)",
+        value: message.content?.length ? `\`\`\`\n${message.content.slice(0, 900)}\n\`\`\`` : "`(no text)`",
+        inline: false,
+      })
+      .setFooter({ text: "Buttons require scope: threats/all." })
+      .setTimestamp(Date.now());
+
+    const sent = await ch
+      .send({
+        content:
+          `🧾 **BRIGHT THREAT CAPSULE**\n` +
+          `Expires: <t:${Math.floor((capsule.expiresAt ?? Date.now()) / 1000)}:R>\n` +
+          `\`\`\`txt\nthreat:${b64}\n\`\`\``,
+        embeds: [embed],
+        components: [makeThreatButtons(guild.id, "pending", author.id, false)],
+      })
+      .catch(() => null);
+
+    if (!sent) return null;
+
+    // Patch buttons with the actual log message id
+    await sent
+      .edit({
+        components: [makeThreatButtons(guild.id, sent.id, author.id, false)],
+      })
+      .catch(() => {});
+
+    if (THREATS_TTL_MS > 0) {
+      setTimeout(() => sent.delete().catch(() => {}), THREATS_TTL_MS).unref?.();
+    }
+
+    return sent;
+  }
+
   // =========================
   // BRIGHT REVIEW KICK-FIRST
   // =========================
-  async function triggerBrightReviewKickFirst({
-    guild,
-    botMember,
-    adderOrExecutor,
-    origin,
-    reason,
-  }) {
+  async function triggerBrightReviewKickFirst({ guild, botMember, adderOrExecutor, origin, reason }) {
     const botId = botMember.id;
 
     const dk = `${guild.id}:${botId}`;
@@ -823,21 +1081,248 @@ module.exports = (client) => {
   }
 
   // =========================
-  // INTERACTIONS
+  // INTERACTIONS (buttons)
   // =========================
   client.on("interactionCreate", async (interaction) => {
     if (!interaction.isButton()) return;
 
     const parts = interaction.customId.split(":");
+    const prefix = parts[0];
 
-    // restore capsule button: bright:restorecap:<logChannelId>:<logMessageId>
+    // -------------------------
+    // THREATS (3-button log + action menu)
+    // -------------------------
+    // Log buttons: bth:<action>:<guildId>:<threatMsgId>:<userId>
+    // Menu buttons: bth2:<action>:<guildId>:<threatMsgId>:<userId>
+    if (prefix === "bth" || prefix === "bth2") {
+      const action = parts[1];
+      const guildId = parts[2];
+      const threatMsgId = parts[3];
+      const targetUserId = parts[4];
+
+      const guild = interaction.guild;
+      if (!guild || guild.id !== guildId) {
+        await interaction.reply({ content: "⚠️ Guild mismatch.", ephemeral: true }).catch(() => {});
+        return;
+      }
+
+      if (!hasScope(guild, interaction.user, "threats")) {
+        await interaction
+          .reply({ content: "⚠️ You need `threats` (or `all`) whitelist scope to do that.", ephemeral: true })
+          .catch(() => {});
+        return;
+      }
+
+      const threatsCh = guild.channels.cache.find(
+        (c) => c.type === ChannelType.GuildText && c.name === BRIGHT_THREATS_CHANNEL_NAME
+      );
+
+      async function fetchThreatLogMessage() {
+        if (!threatsCh) return null;
+        return threatsCh.messages.fetch(threatMsgId).catch(() => null);
+      }
+
+      async function fetchThreatCapsule() {
+        const logMsg = await fetchThreatLogMessage();
+        if (!logMsg) return null;
+        const b64 = extractThreatCapsuleFromMessage(logMsg.content);
+        if (!b64) return null;
+        try {
+          return decodeThreatCapsule(b64);
+        } catch {
+          return null;
+        }
+      }
+
+      async function writeThreatCapsuleBack(logMsg, capsule) {
+        const b64 = encodeThreatCapsule(capsule);
+        const content =
+          `🧾 **BRIGHT THREAT CAPSULE**\n` +
+          `Expires: <t:${Math.floor((capsule.expiresAt ?? Date.now()) / 1000)}:R>\n` +
+          `\`\`\`txt\nthreat:${b64}\n\`\`\``;
+
+        await logMsg.edit({
+          content,
+          embeds: logMsg.embeds,
+          components: logMsg.components,
+        }).catch(() => {});
+      }
+
+      async function appendActionToLog(actionLabel) {
+        const logMsg = await fetchThreatLogMessage();
+        const capsule = await fetchThreatCapsule();
+        if (!logMsg || !capsule) return;
+
+        capsule.actions = Array.isArray(capsule.actions) ? capsule.actions : [];
+        capsule.actions.push({ by: interaction.user.id, at: Date.now(), action: actionLabel });
+
+        // Update embed with latest action
+        const base = logMsg.embeds?.[0] ? EmbedBuilder.from(logMsg.embeds[0]) : new EmbedBuilder();
+        base.setFooter({ text: `Last action: ${actionLabel} by ${interaction.user.tag}` }).setTimestamp(Date.now());
+
+        await logMsg.edit({
+          embeds: [base],
+          components: logMsg.components,
+        }).catch(() => {});
+
+        await writeThreatCapsuleBack(logMsg, capsule);
+      }
+
+      // Take Action → ephemeral with action buttons
+      if (prefix === "bth" && action === "menu") {
+        await interaction
+          .reply({
+            ephemeral: true,
+            content: `Select an action for <@${targetUserId}>.`,
+            components: makeThreatActionMenu(guild.id, threatMsgId, targetUserId),
+          })
+          .catch(() => {});
+        return;
+      }
+
+      // Ignore → mark ignored + disable the 3 log buttons
+      if (prefix === "bth" && action === "ignore") {
+        const logMsg = await fetchThreatLogMessage();
+        const capsule = await fetchThreatCapsule();
+
+        if (!logMsg || !capsule) {
+          await interaction.reply({ content: "⚠️ Threat log/capsule missing.", ephemeral: true }).catch(() => {});
+          return;
+        }
+
+        capsule.ignored = true;
+        capsule.actions = Array.isArray(capsule.actions) ? capsule.actions : [];
+        capsule.actions.push({ by: interaction.user.id, at: Date.now(), action: "Ignored" });
+
+        const base = logMsg.embeds?.[0] ? EmbedBuilder.from(logMsg.embeds[0]) : new EmbedBuilder();
+        base
+          .addFields({ name: "Status", value: `✅ Ignored by <@${interaction.user.id}>`, inline: false })
+          .setTimestamp(Date.now());
+
+        await logMsg
+          .edit({
+            embeds: [base],
+            components: [makeThreatButtons(guild.id, threatMsgId, targetUserId, true)],
+          })
+          .catch(() => {});
+
+        await writeThreatCapsuleBack(logMsg, capsule);
+
+        await interaction.reply({ content: "✅ Marked as ignored and disabled buttons.", ephemeral: true }).catch(() => {});
+        return;
+      }
+
+      // User Info → ephemeral embed
+      if (prefix === "bth" && action === "info") {
+        const user = await client.users.fetch(targetUserId).catch(() => null);
+        const member = await guild.members.fetch(targetUserId).catch(() => null);
+
+        if (!user) {
+          await interaction.reply({ content: "⚠️ User not found.", ephemeral: true }).catch(() => {});
+          return;
+        }
+
+        const roles =
+          member?.roles?.cache
+            ?.filter((r) => r.id !== guild.id)
+            .map((r) => r.toString())
+            .slice(0, 25)
+            .join(" ") || "(none)";
+
+        const embed = new EmbedBuilder()
+          .setTitle("👤 User Info")
+          .setThumbnail(user.displayAvatarURL?.({ size: 256 }) ?? null)
+          .addFields(
+            { name: "User", value: `${user.tag}\n\`${user.id}\``, inline: true },
+            { name: "Bot", value: user.bot ? "✅ Yes" : "❌ No", inline: true },
+            {
+              name: "Account Created",
+              value: `<t:${Math.floor(user.createdTimestamp / 1000)}:F>`,
+              inline: false,
+            },
+            {
+              name: "Joined Server",
+              value: member?.joinedTimestamp ? `<t:${Math.floor(member.joinedTimestamp / 1000)}:F>` : "(not in guild?)",
+              inline: false,
+            },
+            { name: "Roles (top 25)", value: roles, inline: false }
+          )
+          .setTimestamp(Date.now());
+
+        await interaction.reply({ embeds: [embed], ephemeral: true }).catch(() => {});
+        return;
+      }
+
+      // Menu actions (bth2)
+      if (prefix === "bth2") {
+        const member = await guild.members.fetch(targetUserId).catch(() => null);
+        if (!member) {
+          await interaction.reply({ content: "⚠️ Member not found in guild.", ephemeral: true }).catch(() => {});
+          return;
+        }
+
+        const reason = `[BRIGHT][THREATS] Action by ${interaction.user.tag} (${interaction.user.id}) from threat log ${threatMsgId}`;
+
+        // Timeout helpers
+        async function doTimeout(ms, label) {
+          if (!member.moderatable) {
+            await interaction.reply({ content: "⚠️ Cannot timeout this member (hierarchy/perms).", ephemeral: true }).catch(() => {});
+            return;
+          }
+          await member.timeout(ms, reason).catch(() => {});
+          await appendActionToLog(label);
+          await interaction.reply({ content: `✅ ${label} applied to ${member.user.tag}.`, ephemeral: true }).catch(() => {});
+        }
+
+        if (action === "timeout10m") return void (await doTimeout(10 * 60 * 1000, "Timeout 10m"));
+        if (action === "timeout1h") return void (await doTimeout(60 * 60 * 1000, "Timeout 1h"));
+        if (action === "timeout24h") return void (await doTimeout(24 * 60 * 60 * 1000, "Timeout 24h"));
+
+        if (action === "kick") {
+          if (!member.kickable) {
+            await interaction.reply({ content: "⚠️ Cannot kick this member (hierarchy/perms).", ephemeral: true }).catch(() => {});
+            return;
+          }
+          await member.kick(reason).catch(() => {});
+          await appendActionToLog("Kick");
+          await interaction.reply({ content: `✅ Kicked ${targetUserId}.`, ephemeral: true }).catch(() => {});
+          return;
+        }
+
+        if (action === "ban") {
+          const bannable = member.bannable;
+          if (!bannable) {
+            await interaction.reply({ content: "⚠️ Cannot ban this member (hierarchy/perms).", ephemeral: true }).catch(() => {});
+            return;
+          }
+          await guild.members.ban(targetUserId, { reason }).catch(() => {});
+          await appendActionToLog("Ban");
+          await interaction.reply({ content: `✅ Banned ${targetUserId}.`, ephemeral: true }).catch(() => {});
+          return;
+        }
+
+        if (action === "dismiss") {
+          await interaction.reply({ content: "✅ Dismissed.", ephemeral: true }).catch(() => {});
+          return;
+        }
+
+        await interaction.reply({ content: "⚠️ Unknown action.", ephemeral: true }).catch(() => {});
+        return;
+      }
+
+      // If somehow falls through
+      await interaction.reply({ content: "⚠️ Unknown threat button.", ephemeral: true }).catch(() => {});
+      return;
+    }
+
+    // -------------------------
+    // RESTORE CAPSULE BUTTON (bright:restorecap:<logChannelId>:<logMessageId>)
+    // -------------------------
     if (parts[0] === "bright" && parts[1] === "restorecap") {
       const guild = interaction.guild;
       if (!guild) return;
 
-      const allowed = hasScope(guild, interaction.user, "restore");
-
-      if (!allowed) {
+      if (!hasScope(guild, interaction.user, "restore")) {
         await interaction
           .reply({ content: "⚠️ You need `restore` (or `all`) whitelist scope to do that.", ephemeral: true })
           .catch(() => {});
@@ -856,9 +1341,7 @@ module.exports = (client) => {
 
       const msg = await logCh.messages.fetch(logMessageId).catch(() => null);
       if (!msg) {
-        await interaction
-          .reply({ content: "⚠️ Capsule message missing (expired or deleted).", ephemeral: true })
-          .catch(() => {});
+        await interaction.reply({ content: "⚠️ Capsule message missing (expired or deleted).", ephemeral: true }).catch(() => {});
         return;
       }
 
@@ -877,13 +1360,13 @@ module.exports = (client) => {
       }
 
       const result = await restoreFromCapsule(guild, capsule);
-      await interaction
-        .reply({ content: result.ok ? `✅ ${result.msg}` : `❌ ${result.msg}`, ephemeral: true })
-        .catch(() => {});
+      await interaction.reply({ content: result.ok ? `✅ ${result.msg}` : `❌ ${result.msg}`, ephemeral: true }).catch(() => {});
       return;
     }
 
-    // other bright buttons use format: bright:<action>:<guildId>:<targetId>
+    // -------------------------
+    // OTHER BRIGHT BUTTONS: bright:<action>:<guildId>:<targetId>
+    // -------------------------
     if (parts.length !== 4) return;
     const [ns, action, guildId, targetId] = parts;
     if (ns !== "bright") return;
@@ -894,10 +1377,9 @@ module.exports = (client) => {
       return;
     }
 
-    // BOT accept/deny (requires bot-adds OR all)
+    // BOT accept/deny requires bot-adds
     if (action === "accept" || action === "deny") {
-      const allowed = hasScope(guild, interaction.user, "bot-adds");
-      if (!allowed) {
+      if (!hasScope(guild, interaction.user, "bot-adds")) {
         await interaction
           .reply({ content: "⚠️ You need `bot-adds` (or `all`) whitelist scope to do that.", ephemeral: true })
           .catch(() => {});
@@ -917,15 +1399,8 @@ module.exports = (client) => {
           .setColor(0x2ecc71)
           .addFields({ name: "Decision", value: `✅ **ACCEPTED** by <@${interaction.user.id}>`, inline: false });
 
-        await interaction.message
-          .edit({ embeds: [edited], components: [makeReviewButtons(guild.id, botId, true)] })
-          .catch(() => {});
-        await interaction
-          .reply({
-            content: `✅ Accepted. You can re-add \`${botId}\` and it will NOT be auto-kicked for dangerous perms.`,
-            ephemeral: true,
-          })
-          .catch(() => {});
+        await interaction.message.edit({ embeds: [edited], components: [makeReviewButtons(guild.id, botId, true)] }).catch(() => {});
+        await interaction.reply({ content: `✅ Accepted. You can re-add \`${botId}\` and it will NOT be auto-kicked.`, ephemeral: true }).catch(() => {});
         return;
       }
 
@@ -938,20 +1413,15 @@ module.exports = (client) => {
           .setColor(0xe74c3c)
           .addFields({ name: "Decision", value: `❌ **DENIED** by <@${interaction.user.id}>`, inline: false });
 
-        await interaction.message
-          .edit({ embeds: [edited], components: [makeReviewButtons(guild.id, botId, true)] })
-          .catch(() => {});
-        await interaction
-          .reply({ content: `❌ Denied. If \`${botId}\` is re-added, it will be kicked automatically.`, ephemeral: true })
-          .catch(() => {});
+        await interaction.message.edit({ embeds: [edited], components: [makeReviewButtons(guild.id, botId, true)] }).catch(() => {});
+        await interaction.reply({ content: `❌ Denied. If \`${botId}\` is re-added, it will be kicked automatically.`, ephemeral: true }).catch(() => {});
         return;
       }
     }
 
-    // HUMAN restore/keep derolled (requires restore OR all)
+    // HUMAN restore/keep requires restore
     if (action === "restore_roles" || action === "keep_derolled") {
-      const allowed = hasScope(guild, interaction.user, "restore");
-      if (!allowed) {
+      if (!hasScope(guild, interaction.user, "restore")) {
         await interaction
           .reply({ content: "⚠️ You need `restore` (or `all`) whitelist scope to do that.", ephemeral: true })
           .catch(() => {});
@@ -992,9 +1462,7 @@ module.exports = (client) => {
           .setColor(0x2ecc71)
           .addFields({ name: "Decision", value: `✅ **RESTORED** by <@${interaction.user.id}>`, inline: false });
 
-        await interaction.message
-          .edit({ embeds: [edited], components: [makeHumanReviewButtons(guild.id, executorId, true)] })
-          .catch(() => {});
+        await interaction.message.edit({ embeds: [edited], components: [makeHumanReviewButtons(guild.id, executorId, true)] }).catch(() => {});
         await interaction.reply({ content: "✅ Roles restored (best-effort).", ephemeral: true }).catch(() => {});
         return;
       }
@@ -1006,9 +1474,7 @@ module.exports = (client) => {
           .setColor(0xe74c3c)
           .addFields({ name: "Decision", value: `❌ **KEPT DEROLED** by <@${interaction.user.id}>`, inline: false });
 
-        await interaction.message
-          .edit({ embeds: [edited], components: [makeHumanReviewButtons(guild.id, executorId, true)] })
-          .catch(() => {});
+        await interaction.message.edit({ embeds: [edited], components: [makeHumanReviewButtons(guild.id, executorId, true)] }).catch(() => {});
         await interaction.reply({ content: "❌ Kept derolled.", ephemeral: true }).catch(() => {});
         return;
       }
@@ -1042,9 +1508,12 @@ module.exports = (client) => {
           `• \`roles\`, \`channels\`, \`webhooks\`, \`bans\`, \`admin\`\n` +
           `• \`restore\` (can use restore buttons)\n` +
           `• \`bot-adds\` (can Accept/Deny bot review)\n` +
+          `• \`threats\` (can use threat log/action buttons)\n` +
           `• \`all\`\n\n` +
           `**Restore (no DB)**\n` +
-          `Panels include restore buttons when Bright takes action. Capsules are stored in #${BRIGHT_LOG_CHANNEL_NAME}.\n`
+          `Panels include restore buttons when Bright takes action. Capsules are stored in #${BRIGHT_LOG_CHANNEL_NAME}.\n` +
+          `**Threats**\n` +
+          `Threat logs are stored in #${BRIGHT_THREATS_CHANNEL_NAME}.\n`
       );
       return;
     }
@@ -1052,7 +1521,6 @@ module.exports = (client) => {
     const isOwnerOrAdmin =
       message.author.id === message.guild.ownerId || message.author.id === EXTRA_WHITELIST_ID;
 
-    // whitelist list
     if (cmd === "=whitelist" && tokens[1]?.toLowerCase() === "list") {
       const map = whitelist.get(message.guild.id) ?? new Map();
       if (map.size === 0) return void (await message.reply("✅ Whitelist is empty."));
@@ -1102,7 +1570,6 @@ module.exports = (client) => {
     const hasFor = lower.includes("for");
     const hasInlineScopes = tokens.length > 2 && !hasFor;
 
-    // No scopes provided => remove entirely
     if ((!hasFor && !hasInlineScopes) || scopes.has("all")) {
       map.delete(target.id);
       await message.reply(`✅ Removed **${target.tag}** from the whitelist.`);
@@ -1114,7 +1581,7 @@ module.exports = (client) => {
       map.delete(target.id);
       await message.reply(
         `✅ Removed **${target.tag}** from \`all\` whitelist.\n` +
-          `Re-add partial with: \`=whitelist ${target.id} restore bot-adds\``
+          `Re-add partial with: \`=whitelist ${target.id} restore bot-adds threats\``
       );
       return;
     }
@@ -1127,6 +1594,36 @@ module.exports = (client) => {
       `✅ Updated whitelist for **${target.tag}**: ` +
         (map.has(target.id) ? `\`${formatScopes(map.get(target.id))}\`` : "`(removed)`")
     );
+  });
+
+  // =========================
+  // THREAT DETECTION LISTENER
+  // =========================
+  client.on("messageCreate", async (message) => {
+    if (!message.guild || message.author.bot) return;
+
+    // Don’t scan your command messages
+    if (message.content?.trim().startsWith("=")) return;
+
+    const rule = pickThreatRule(message.content);
+    if (!rule) return;
+
+    const dk = `${message.guild.id}:${message.author.id}`;
+    const last = threatDedupe.get(dk) ?? 0;
+    if (Date.now() - last < THREAT_DEDUPE_MS) return;
+    threatDedupe.set(dk, Date.now());
+
+    let deleted = false;
+    if (message.deletable) {
+      deleted = await message.delete().then(() => true).catch(() => false);
+    }
+
+    await postThreatLog({
+      guild: message.guild,
+      rule,
+      message,
+      deleted,
+    });
   });
 
   // =========================
@@ -1240,7 +1737,7 @@ module.exports = (client) => {
                 .map((r) => r.id);
               const managedKeep = execMember.roles.cache.filter((r) => r.managed).map((r) => r.id);
 
-              const { removed, managedKeep: keepManaged } = await deroleMemberKeepManaged(
+              const { managedKeep: keepManaged } = await deroleMemberKeepManaged(
                 guild,
                 execMember,
                 "Mass role removal detected"
@@ -1265,7 +1762,7 @@ module.exports = (client) => {
                 guild,
                 executorUser: execMember.user,
                 reason: `Removed ${ROLE_STRIP_THRESHOLD}+ roles within ~3 minutes`,
-                removedRoles: removed,
+                removedRoles: beforeRoleIds,
               });
 
               if (capsuleMsg) {
@@ -1325,8 +1822,7 @@ module.exports = (client) => {
     if (!guild || guild.available === false) return;
 
     const executor = await getAuditExecutor(guild, AuditLogEvent.ChannelDelete, channel.id);
-    const field =
-      channel.type === ChannelType.GuildCategory ? "categoryDelete" : "channelDelete";
+    const field = channel.type === ChannelType.GuildCategory ? "categoryDelete" : "channelDelete";
 
     const snap = {
       id: channel.id,
