@@ -75,6 +75,9 @@ module.exports = {
   },
 };
 
+// =========================
+// HELP MENU BUILDER
+// =========================
 async function getHelpMenu({ client, guild }, prefix = "=") {
   const options = [];
 
@@ -89,15 +92,7 @@ async function getHelpMenu({ client, guild }, prefix = "=") {
     });
   }
 
-  // 🔥 HARD-CODED: WHITELISTING
-  options.push({
-    label: "Whitelisting",
-    value: "WHITELISTING",
-    description: "Temporary bot whitelist (1 hour)",
-    emoji: "🛡️",
-  });
-
-  // 🔥 HARD-CODED: ANTI-NUKE
+  // 🔥 PREFIX-ONLY CATEGORY: ANTI-NUKE
   options.push({
     label: "Anti-Nuke",
     value: "ANTI_NUKE",
@@ -132,8 +127,8 @@ async function getHelpMenu({ client, guild }, prefix = "=") {
       `**About Me**\n` +
         `Hello, I am **${guild.members.me.displayName}**.\n` +
         `A multipurpose Discord bot with built-in security.\n\n` +
-        `**🛡️ Anti-Nuke Protection**\n` +
-        `Use \`${prefix}help\` → **Anti-Nuke** to view protection info.\n\n` +
+        `**🚨 Anti-Nuke Protection**\n` +
+        `Available via **\`${prefix}help\` only**.\n\n` +
         `**Invite Me:** [Here](${client.getInvite()})\n` +
         `**Support Server:** [Join](${SUPPORT_SERVER})`
     );
@@ -144,6 +139,9 @@ async function getHelpMenu({ client, guild }, prefix = "=") {
   };
 }
 
+// =========================
+// INTERACTION HANDLER
+// =========================
 const waiter = (msg, userId, prefix) => {
   const collector = msg.channel.createMessageComponentCollector({
     filter: (i) => i.user.id === userId && i.message.id === msg.id,
@@ -160,11 +158,13 @@ const waiter = (msg, userId, prefix) => {
 
     if (i.customId === "help-menu") {
       const category = i.values[0];
-      embeds = prefix
-        ? getMsgCategoryEmbeds(msg.client, category, prefix)
-        : getSlashCategoryEmbeds(msg.client, category);
-      page = 0;
 
+      embeds =
+        prefix
+          ? getMsgCategoryEmbeds(msg.client, category, prefix)
+          : getSlashCategoryEmbeds(msg.client, category);
+
+      page = 0;
       buttonsRow.components.forEach((b) =>
         b.setDisabled(embeds.length <= 1)
       );
@@ -182,39 +182,22 @@ const waiter = (msg, userId, prefix) => {
 };
 
 // =========================
-// SLASH EMBEDS
+// SLASH HELP (ANTI-NUKE HIDDEN)
 // =========================
 function getSlashCategoryEmbeds(client, category) {
-  if (category === "WHITELISTING") {
-    return [
-      new EmbedBuilder()
-        .setColor(EMBED_COLORS.BOT_EMBED)
-        .setAuthor({ name: "Whitelisting" })
-        .setDescription(
-          "`=whitelist <user-id>`\n" +
-          "Allows a user to add bots for **1 hour**.\n" +
-          "**Server owner only.**"
-        ),
-    ];
-  }
-
+  // ❌ Anti-Nuke never shows in slash help
   if (category === "ANTI_NUKE") {
     return [
       new EmbedBuilder()
         .setColor(EMBED_COLORS.BOT_EMBED)
-        .setAuthor({ name: "Anti-Nuke System" })
-        .setDescription(
-          "**Bright Anti-Nuke Protection**\n\n" +
-          "• Detects nukes & mass admin abuse\n" +
-          "• Restores roles, channels & perms\n" +
-          "• Logs threats in `#bright-threats`\n" +
-          "• Owner review panels (Accept / Deny / Restore)\n\n" +
-          "Access via `=help`"
-        ),
+        .setDescription("This category is available via `=help` only."),
     ];
   }
 
-  const cmds = [...client.slashCommands.values()].filter(c => c.category === category);
+  const cmds = [...client.slashCommands.values()].filter(
+    (c) => c.category === category
+  );
+
   if (!cmds.length) {
     return [
       new EmbedBuilder()
@@ -227,39 +210,29 @@ function getSlashCategoryEmbeds(client, category) {
 }
 
 // =========================
-// PREFIX EMBEDS
+// PREFIX HELP (ANTI-NUKE LIVES HERE)
 // =========================
 function getMsgCategoryEmbeds(client, category, prefix) {
-  if (category === "WHITELISTING") {
-    return [
-      new EmbedBuilder()
-        .setColor(EMBED_COLORS.BOT_EMBED)
-        .setAuthor({ name: "Whitelisting" })
-        .setDescription(
-          `\`${prefix}whitelist <user-id>\`\n` +
-          "Temporary bot whitelist (1 hour).\n" +
-          "**Owner only.**"
-        ),
-    ];
-  }
-
   if (category === "ANTI_NUKE") {
     return [
       new EmbedBuilder()
         .setColor(EMBED_COLORS.BOT_EMBED)
         .setAuthor({ name: "Anti-Nuke System" })
         .setDescription(
-          "**Server Anti-Nuke Protection**\n\n" +
-          "• Auto blocks nukes\n" +
-          "• Restore panels\n" +
-          "• Threat logging\n" +
-          "• Owner-only controls\n\n" +
-          `Use \`${prefix}help\` anytime`
+          "**Server Protection Active**\n\n" +
+          "• Detects nukes & mass admin abuse\n" +
+          "• Auto restores roles, channels & perms\n" +
+          "• Logs threats in `#bright-threats`\n" +
+          "• Owner review & restore panels\n\n" +
+          `Accessed via **\`${prefix}help\` only**`
         ),
     ];
   }
 
-  const cmds = [...client.commands.values()].filter(c => c.category === category);
+  const cmds = [...client.commands.values()].filter(
+    (c) => c.category === category
+  );
+
   if (!cmds.length) {
     return [
       new EmbedBuilder()
@@ -272,7 +245,7 @@ function getMsgCategoryEmbeds(client, category, prefix) {
 }
 
 // =========================
-// PAGINATION BUILDER
+// PAGINATION
 // =========================
 function buildPagedEmbeds(commands, slash, prefix = "") {
   const pages = [];
@@ -283,7 +256,7 @@ function buildPagedEmbeds(commands, slash, prefix = "") {
       .setColor(EMBED_COLORS.BOT_EMBED)
       .setDescription(
         page
-          .map(c =>
+          .map((c) =>
             slash
               ? `\`/${c.name}\` — ${c.description}`
               : `\`${prefix}${c.name}\` — ${c.description}`
