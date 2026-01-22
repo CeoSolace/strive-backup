@@ -11,7 +11,7 @@ module.exports = {
     minArgsCount: 1,
     subcommands: [
       { trigger: "list", description: "list all ticket categories" },
-      { trigger: "add <category> | <staff_roles>", description: "add a ticket category" },
+      { trigger: "add <category> | <description> | <staff_roles> | <emoji>", description: "add a ticket category" },
       { trigger: "remove <category>", description: "remove a ticket category" },
     ],
   },
@@ -30,14 +30,26 @@ module.exports = {
         type: ApplicationCommandOptionType.Subcommand,
         options: [
           {
-            name: "category",
+            name: "name",
             description: "the category name",
+            type: ApplicationCommandOptionType.String,
+            required: true,
+          },
+          {
+            name: "description",
+            description: "the category description",
             type: ApplicationCommandOptionType.String,
             required: true,
           },
           {
             name: "staff_roles",
             description: "comma-separated role IDs",
+            type: ApplicationCommandOptionType.String,
+            required: false,
+          },
+          {
+            name: "emoji",
+            description: "emoji for category",
             type: ApplicationCommandOptionType.String,
             required: false,
           },
@@ -49,7 +61,7 @@ module.exports = {
         type: ApplicationCommandOptionType.Subcommand,
         options: [
           {
-            name: "category",
+            name: "name",
             description: "the category name",
             type: ApplicationCommandOptionType.String,
             required: true,
@@ -58,45 +70,44 @@ module.exports = {
       },
     ],
   },
-
   async messageRun(message, args, data) {
     const sub = args[0].toLowerCase();
     let response;
-
     if (sub === "list") {
       response = listCategories(data);
     } else if (sub === "add") {
       const split = args.slice(1).join(" ").split("|");
-      const category = split[0].trim();
-      const staff_roles = split[1]?.trim();
-      response = await addCategory(message.guild, data, category, staff_roles);
+      if (split.length < 2) return message.safeReply("Invalid format. Use: add <category> | <description> | <staff_roles> | <emoji>");
+      const name = split[0].trim();
+      const desc = split[1].trim();
+      const staff_roles = split[2]?.trim();
+      const emoji = split[3]?.trim() || '';
+      response = await addCategory(message.guild, data, name, desc, staff_roles, emoji);
     } else if (sub === "remove") {
-      const category = args.slice(1).join(" ").trim();
-      response = await removeCategory(message.guild, data, category);
+      const name = args.slice(1).join(" ").trim();
+      response = await removeCategory(message.guild, data, name);
     } else {
       response = "Invalid subcommand.";
     }
-
     await message.safeReply(response);
   },
-
   async interactionRun(interaction, data) {
     const sub = interaction.options.getSubcommand();
     let response;
-
     if (sub === "list") {
       response = listCategories(data);
     } else if (sub === "add") {
-      const category = interaction.options.getString("category");
+      const name = interaction.options.getString("name");
+      const desc = interaction.options.getString("description");
       const staff_roles = interaction.options.getString("staff_roles");
-      response = await addCategory(interaction.guild, data, category, staff_roles);
+      const emoji = interaction.options.getString("emoji") || '';
+      response = await addCategory(interaction.guild, data, name, desc, staff_roles, emoji);
     } else if (sub === "remove") {
-      const category = interaction.options.getString("category");
-      response = await removeCategory(interaction.guild, data, category);
+      const name = interaction.options.getString("name");
+      response = await removeCategory(interaction.guild, data, name);
     } else {
       response = "Invalid subcommand";
     }
-
     await interaction.followUp(response);
   },
 };
@@ -104,12 +115,10 @@ module.exports = {
 function listCategories(data) {
   const categories = data.settings.ticket.categories;
   if (!categories?.length) return "No ticket categories found.";
-
   const fields = categories.map(category => ({
     name: category.name,
-    value: `**Staff Roles:** ${category.staff_roles.map(r => `<@&${r}>`).join(", ") || "None"}`
+    value: `**Description:** ${category.desc}\n**Emoji:** ${category.emoji || "None"}\n**Staff Roles:** ${category.staff_roles.map(r => `<@&${r}>`).join(", ") || "None"}\n**Parent Category:** ${category.parent_category ? `<#${category.parent_category}>` : "None"}`
   }));
-
   return {
     embeds: [new EmbedBuilder()
       .setAuthor({ name: "Ticket Categories" })
@@ -118,17 +127,16 @@ function listCategories(data) {
   };
 }
 
-async function addCategory(guild, data, categoryName, staff_roles) {
-  if (!categoryName) return "Category name required.";
-  if (data.settings.ticket.categories.find(c => c.name === categoryName)) {
-    return `Category \`${categoryName}\` already exists.`;
+async function addCategory(guild, data, name, desc, staff_roles, emoji) {
+  if (!name) return "Category name required.";
+  if (!desc) return "Category description required.";
+  if (data.settings.ticket.categories.find(c => c.name === name)) {
+    return `Category \`${name}\` already exists.`;
   }
-
-  // Create dedicated category channel
   let parentCategoryId = null;
   try {
     const catChannel = await guild.channels.create({
-      name: `🎟️・${categoryName}`,
+      name: `🎟️・${name}`,
       type: ChannelType.GuildCategory,
       permissionOverwrites: [
         { id: guild.roles.everyone.id, deny: ["ViewChannel"] }
@@ -138,34 +146,29 @@ async function addCategory(guild, data, categoryName, staff_roles) {
   } catch (ex) {
     return "Failed to create category channel. Ensure bot has Manage Channels permission.";
   }
-
   const staffRoles = (staff_roles?.split(",").map(r => r.trim()).filter(r => /^\d+$/.test(r)) || [])
     .filter(roleId => guild.roles.cache.has(roleId));
-
   data.settings.ticket.categories.push({
-    name: categoryName,
+    name,
+    desc,
     staff_roles: staffRoles,
+    emoji,
     parent_category: parentCategoryId
   });
   await data.settings.save();
-
-  return `✅ Category \`${categoryName}\` created with dedicated channel category.`;
+  return `✅ Category \`${name}\` created with dedicated channel category.`;
 }
 
-async function removeCategory(guild, data, categoryName) {
-  const category = data.settings.ticket.categories.find(c => c.name === categoryName);
-  if (!category) return `Category \`${categoryName}\` not found.`;
-
-  // Delete Discord category channel
+async function removeCategory(guild, data, name) {
+  const category = data.settings.ticket.categories.find(c => c.name === name);
+  if (!category) return `Category \`${name}\` not found.`;
   if (category.parent_category) {
     const channel = guild.channels.cache.get(category.parent_category);
     if (channel?.type === ChannelType.GuildCategory) {
       await channel.delete().catch(() => {});
     }
   }
-
-  data.settings.ticket.categories = data.settings.ticket.categories.filter(c => c.name !== categoryName);
+  data.settings.ticket.categories = data.settings.ticket.categories.filter(c => c.name !== name);
   await data.settings.save();
-
-  return `✅ Category \`${categoryName}\` removed.`;
+  return `✅ Category \`${name}\` removed.`;
 }
