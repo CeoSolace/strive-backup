@@ -1,6 +1,6 @@
 const { ActionRowBuilder, ButtonBuilder, EmbedBuilder, ModalBuilder, TextInputBuilder, SelectMenuBuilder, SelectMenuOptionBuilder, TextInputStyle, ButtonStyle, ChannelType, ApplicationCommandOptionType, ComponentType, PermissionFlagsBits, AttachmentBuilder, Colors } = require('discord.js');
-const Ticket = require('../../database/models/Ticket');
-const GuildSettings = require('../../database/models/GuildSettings');
+const Ticket = require('@schemas/Ticket');
+const GuildSettings = require('@schemas/Guild');
 
 module.exports = {
   name: 'ticket',
@@ -283,9 +283,9 @@ module.exports = {
   },
 
   async execute(client, interaction) {
-    let settings = await GuildSettings.findOne({ guildId: interaction.guild.id });
+    let settings = await Guild.findOne({ guildId: interaction.guild.id });
     if (!settings) {
-      settings = new GuildSettings({ guildId: interaction.guild.id });
+      settings = new Guild({ guildId: interaction.guild.id });
       await settings.save();
     }
     const sub = interaction.options.getSubcommand();
@@ -655,7 +655,7 @@ async function createTicket(interaction, settings, cat, categoryType = 'support'
 }
 
 async function close(interaction, closer, reason) {
-  if (!await isTicketChannel(interaction.channel)) return 'Not a ticket channel';
+  if (!isTicketChannel(interaction.channel)) return 'Not a ticket channel';
   const ticket = await Ticket.findOne({ channel: interaction.channel.id });
   if (!ticket || ticket.status !== 'open') return 'Ticket not open';
 
@@ -715,7 +715,7 @@ async function closeAll(interaction, user) {
 }
 
 async function addToTicket(interaction, targetId) {
-  if (!await isTicketChannel(interaction.channel)) return 'Not a ticket channel';
+  if (!isTicketChannel(interaction.channel)) return 'Not a ticket channel';
   if (!/^\d+$/.test(targetId)) return 'Invalid ID';
   await interaction.channel.permissionOverwrites.edit(targetId, {
     ViewChannel: true,
@@ -726,14 +726,14 @@ async function addToTicket(interaction, targetId) {
 }
 
 async function removeFromTicket(interaction, targetId) {
-  if (!await isTicketChannel(interaction.channel)) return 'Not a ticket channel';
+  if (!isTicketChannel(interaction.channel)) return 'Not a ticket channel';
   if (!/^\d+$/.test(targetId)) return 'Invalid ID';
   await interaction.channel.permissionOverwrites.delete(targetId);
   return `Removed <@${targetId}>`;
 }
 
 async function claimTicket(interaction, user) {
-  if (!await isTicketChannel(interaction.channel)) return 'Not a ticket channel';
+  if (!isTicketChannel(interaction.channel)) return 'Not a ticket channel';
   const ticket = await Ticket.findOne({ channel: interaction.channel.id });
   if (ticket.claimer) return 'Already claimed';
   ticket.claimer = user.id;
@@ -742,7 +742,7 @@ async function claimTicket(interaction, user) {
 }
 
 async function reopenTicket(interaction) {
-  if (!await isTicketChannel(interaction.channel)) return 'Not a ticket channel';
+  if (!isTicketChannel(interaction.channel)) return 'Not a ticket channel';
   const ticket = await Ticket.findOne({ channel: interaction.channel.id });
   if (ticket.status !== 'closed') return 'Ticket not closed';
   ticket.status = 'open';
@@ -754,13 +754,13 @@ async function reopenTicket(interaction) {
 }
 
 async function deleteTicket(interaction) {
-  if (!await isTicketChannel(interaction.channel)) return 'Not a ticket channel';
+  if (!isTicketChannel(interaction.channel)) return 'Not a ticket channel';
   await Ticket.deleteOne({ channel: interaction.channel.id });
   await interaction.channel.delete();
 }
 
 async function generateTranscript(interaction) {
-  if (!await isTicketChannel(interaction.channel)) return interaction.editReply('Not a ticket channel');
+  if (!isTicketChannel(interaction.channel)) return interaction.editReply('Not a ticket channel');
   const transcriptText = await generateTranscriptText(interaction.channel);
   const file = new AttachmentBuilder(Buffer.from(transcriptText), { name: 'transcript.html' });
   await interaction.editReply({ files: [file] });
