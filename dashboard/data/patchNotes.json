@@ -1,5 +1,20 @@
 [
   {
+    "date": "2026-01-25",
+    "version": "2.1.0",
+    "title": "Ticket System Removal and Security Updates",
+    "summary": "Complete removal of the ticket system alongside enhancements to security measures for improved protection.",
+    "added": [],
+    "changed": [],
+    "fixed": [],
+    "removed": [
+      "Entire ticket system, including all related features, commands, and integrations"
+    ],
+    "security": [
+      "Updated security protocols with enhanced measures, including improved encryption, access controls, and threat detection for better overall system integrity"
+    ]
+  },
+  {
     "date": "2026-01-04",
     "version": "2.0.0",
     "title": "Rebrand, new ownership, and policy release",
