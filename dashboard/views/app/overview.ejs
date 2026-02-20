@@ -1,0 +1,64 @@
+<% layout('layouts/app') -%>
+
+<div class="flex flex-col gap-6">
+  <div class="flex flex-col gap-1">
+    <h1 class="text-2xl font-semibold tracking-tight">Overview</h1>
+    <p class="text-sm text-zinc-600 dark:text-zinc-300">A premium home for managing Bright across your servers.</p>
+  </div>
+
+  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="card">
+      <div class="card-header">Connected servers</div>
+      <div class="card-value" data-stat="guildCount">—</div>
+      <div class="card-sub">Servers you can manage</div>
+    </div>
+    <div class="card">
+      <div class="card-header">Consent status</div>
+      <div class="card-value" data-stat="consentSummary">—</div>
+      <div class="card-sub">Your privacy choices</div>
+    </div>
+    <div class="card">
+      <div class="card-header">Health</div>
+      <div class="card-value">Operational</div>
+      <div class="card-sub">Dashboard online</div>
+    </div>
+    <div class="card">
+      <div class="card-header">Next</div>
+      <div class="card-value">Invite</div>
+      <div class="card-sub">Add Bright to a server</div>
+    </div>
+  </div>
+
+  <div class="grid gap-6 lg:grid-cols-3">
+    <section class="card lg:col-span-2">
+      <div class="card-title">Quick actions</div>
+      <div class="mt-4 grid gap-3 sm:grid-cols-2">
+        <a class="action" href="/app/servers">
+          <div class="action-title">Manage a server</div>
+          <div class="action-sub">Pick a guild and configure modules</div>
+        </a>
+        <a class="action" href="/app/privacy-consent">
+          <div class="action-title">Privacy &amp; Consent</div>
+          <div class="action-sub">Review what’s enabled and why</div>
+        </a>
+        <a class="action" href="/app/account/profile">
+          <div class="action-title">Account</div>
+          <div class="action-sub">Export or delete your dashboard data</div>
+        </a>
+        <a class="action" href="/app/logs">
+          <div class="action-title">View logs</div>
+          <div class="action-sub">Audit actions and activity (placeholder)</div>
+        </a>
+      </div>
+    </section>
+
+    <aside class="card">
+      <div class="card-title">Getting started</div>
+      <ol class="mt-4 space-y-3 text-sm text-zinc-600 dark:text-zinc-300">
+        <li class="flex gap-3"><span class="badge">1</span><span>Invite Bright to a server.</span></li>
+        <li class="flex gap-3"><span class="badge">2</span><span>Enable modules and commands.</span></li>
+        <li class="flex gap-3"><span class="badge">3</span><span>Set your privacy preferences.</span></li>
+      </ol>
+    </aside>
+  </div>
+</div>

@@ -1,0 +1,22 @@
+<div
+  id="consent-banner"
+  class="fixed inset-x-0 bottom-0 z-50 hidden border-t border-zinc-200 bg-white/90 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/90"
+  role="dialog"
+  aria-live="polite"
+  aria-label="Privacy preferences"
+>
+  <div class="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+    <div class="min-w-0">
+      <div class="text-sm font-semibold">Privacy choices</div>
+      <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+        Bright uses essential data to run the dashboard. You can optionally enable analytics and diagnostics to help improve reliability.
+      </p>
+    </div>
+
+    <div class="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
+      <button class="btn btn-secondary" data-consent-action="essential">Essentials only</button>
+      <a class="btn btn-ghost" href="/app/privacy-consent" data-consent-action="customize">Customize</a>
+      <button class="btn btn-primary" data-consent-action="all">Accept all (optional)</button>
+    </div>
+  </div>
+</div>

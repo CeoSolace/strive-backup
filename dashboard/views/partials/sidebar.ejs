@@ -1,0 +1,43 @@
+<aside
+  id="sidebar"
+  class="group relative hidden w-72 shrink-0 border-r border-zinc-200 bg-white/70 backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:border-zinc-800 dark:bg-zinc-950/60 lg:block"
+>
+  <div class="flex h-full flex-col">
+    <div class="flex items-center gap-3 px-5 py-5">
+      <div class="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-soft">
+        <span class="text-lg font-semibold">B</span>
+      </div>
+      <div class="min-w-0">
+        <div class="truncate text-sm font-semibold">Bright</div>
+        <div class="truncate text-xs text-zinc-500 dark:text-zinc-400">Premium dashboard</div>
+      </div>
+    </div>
+
+    <nav class="flex-1 px-3">
+      <%- include('./sidebar-item', { href: '/app/overview', label: 'Overview', icon: 'home' }) %>
+      <%- include('./sidebar-item', { href: '/app/servers', label: 'Servers', icon: 'server' }) %>
+      <%- include('./sidebar-item', { href: '/app/modules', label: 'Modules', icon: 'puzzle' }) %>
+      <%- include('./sidebar-item', { href: '/app/commands', label: 'Commands', icon: 'terminal' }) %>
+      <%- include('./sidebar-item', { href: '/app/automations', label: 'Automations', icon: 'zap' }) %>
+      <%- include('./sidebar-item', { href: '/app/logs', label: 'Logs', icon: 'scroll' }) %>
+      <%- include('./sidebar-item', { href: '/app/analytics', label: 'Analytics', icon: 'chart' }) %>
+
+      <div class="mt-4 px-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">Account</div>
+      <%- include('./sidebar-item', { href: '/app/account/profile', label: 'Account', icon: 'user' }) %>
+      <%- include('./sidebar-item', { href: '/app/privacy-consent', label: 'Privacy & Consent', icon: 'shield' }) %>
+
+      <div class="mt-4 px-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">System</div>
+      <%- include('./sidebar-item', { href: '/app/settings', label: 'Settings', icon: 'settings' }) %>
+      <%- include('./sidebar-item', { href: '/app/billing', label: 'Billing', icon: 'creditcard' }) %>
+    </nav>
+
+    <div class="border-t border-zinc-200 px-5 py-4 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+      <div class="flex items-center justify-between gap-3">
+        <span class="truncate">Bright — built by TheCeoTyro</span>
+        <span class="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] dark:bg-zinc-900">v1</span>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- Mobile sidebar trigger (handled in topbar) -->

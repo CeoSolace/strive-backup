@@ -1,0 +1,12 @@
+<%
+  const active = (typeof activePath !== 'undefined' && activePath) ? activePath.startsWith(href) : (typeof currentURL !== 'undefined' ? currentURL.includes(href) : false);
+%>
+<a
+  href="<%= href %>"
+  class="group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-zinc-50 <%= active ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50' : 'text-zinc-600 dark:text-zinc-300' %>"
+>
+  <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-100 text-zinc-700 group-hover:bg-white dark:bg-zinc-900 dark:text-zinc-200 dark:group-hover:bg-zinc-950">
+    <span data-icon="<%= icon %>" class="text-[12px]"></span>
+  </span>
+  <span class="truncate"><%= label %></span>
+</a>

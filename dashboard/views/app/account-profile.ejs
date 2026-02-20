@@ -1,0 +1,64 @@
+<% layout('layouts/app') -%>
+
+<div class="flex flex-col gap-6">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight">Account</h1>
+    <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">Profile, exports, and account controls.</p>
+  </div>
+
+  <div class="grid gap-6 lg:grid-cols-3">
+    <section class="card lg:col-span-2">
+      <div class="card-title">Profile</div>
+      <div class="mt-4 flex items-center gap-4">
+        <img class="h-14 w-14 rounded-2xl" src="<%= user?.displayAvatar || 'https://cdn.discordapp.com/embed/avatars/0.png' %>" alt="" referrerpolicy="no-referrer" />
+        <div class="min-w-0">
+          <div class="truncate text-base font-semibold"><%= user?.username || 'User' %></div>
+          <div class="mt-0.5 truncate text-sm text-zinc-600 dark:text-zinc-300">Discord ID: <span class="font-mono"><%= user?.id || '' %></span></div>
+          <div class="mt-0.5 text-sm text-zinc-600 dark:text-zinc-300">Email: <span data-me="email">—</span></div>
+        </div>
+      </div>
+
+      <div class="mt-6 grid gap-3 sm:grid-cols-2">
+        <div class="rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800">
+          <div class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Connected guilds</div>
+          <div class="mt-2 text-2xl font-semibold" data-me="guildCount">—</div>
+        </div>
+        <div class="rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800">
+          <div class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Session</div>
+          <div class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">This device is signed in.</div>
+        </div>
+      </div>
+
+      <div class="mt-6 flex flex-wrap gap-2">
+        <a class="btn btn-secondary" href="/logout">Sign out</a>
+        <button class="btn btn-secondary" data-action="export-data">Export my data</button>
+      </div>
+
+      <div class="mt-8 rounded-2xl border border-red-200 bg-red-50 p-5 dark:border-red-900/50 dark:bg-red-950/30">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <div class="text-sm font-semibold text-red-700 dark:text-red-200">Danger zone</div>
+            <p class="mt-1 text-sm text-red-700/80 dark:text-red-200/80">
+              Delete dashboard-only data: consents, audit history, and account record. This does not remove Bright from servers.
+            </p>
+          </div>
+          <button class="btn btn-destructive" data-action="delete-account">Delete account</button>
+        </div>
+      </div>
+
+      <div class="mt-4 text-xs text-zinc-500 dark:text-zinc-400">Bright — built by TheCeoTyro</div>
+    </section>
+
+    <aside class="card">
+      <div class="card-title">Security</div>
+      <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">Manage sessions and sign out everywhere.</p>
+      <a class="btn btn-secondary mt-4 w-full" href="/app/account/security">Open Security</a>
+
+      <div class="mt-6">
+        <div class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Privacy</div>
+        <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">Review your consent preferences any time.</p>
+        <a class="btn btn-ghost mt-3 w-full" href="/app/privacy-consent">Privacy &amp; Consent</a>
+      </div>
+    </aside>
+  </div>
+</div>
