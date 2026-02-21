@@ -1,3 +1,4 @@
+// dashboard/app.js
 const path = require("path");
 
 const config = require("@root/config");
@@ -8,6 +9,8 @@ module.exports.launch = async (client) => {
   const express = require("express");
   const session = require("express-session");
   const MongoStore = require("connect-mongo");
+
+  // These MUST exist in dependencies (added in package.json below)
   const helmet = require("helmet");
   const rateLimit = require("express-rate-limit");
   const cookieParser = require("cookie-parser");
@@ -29,14 +32,13 @@ module.exports.launch = async (client) => {
   client.states = {};
   client.config = config;
 
+  // Ensure DB is up for sessions + dashboard
   const db = await mongoose.initializeMongoose();
 
   const port = process.env.PORT || config.DASHBOARD.port;
 
-  // Trust proxy for secure cookies + rate limiting behind reverse proxy
   app.set("trust proxy", 1);
 
-  // Basic security headers (CSP customized to allow Tailwind/Inter CDN)
   app.use(
     helmet({
       contentSecurityPolicy: {
@@ -44,17 +46,8 @@ module.exports.launch = async (client) => {
         directives: {
           "default-src": ["'self'"],
           "img-src": ["'self'", "data:", "https:", "http:"],
-          "script-src": [
-            "'self'",
-            "'unsafe-inline'",
-            "https://cdn.tailwindcss.com",
-            "https://unpkg.com",
-          ],
-          "style-src": [
-            "'self'",
-            "'unsafe-inline'",
-            "https://fonts.googleapis.com",
-          ],
+          "script-src": ["'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com", "https://unpkg.com"],
+          "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
           "font-src": ["'self'", "https://fonts.gstatic.com", "data:"],
           "connect-src": ["'self'", "https://discord.com", "https://discordapp.com"],
         },
@@ -63,7 +56,6 @@ module.exports.launch = async (client) => {
     })
   );
 
-  // Rate limit API endpoints (OAuth excluded)
   app.use(
     "/api",
     rateLimit({
@@ -87,9 +79,9 @@ module.exports.launch = async (client) => {
     .set("views", path.join(__dirname, "/views"))
     .use(
       session({
-        secret: process.env.SESSION_PASSWORD,
+        secret: process.env.SESSION_PASSWORD || "CHANGE_ME_SESSION_PASSWORD",
         cookie: {
-          maxAge: 336 * 60 * 60 * 1000, // 14 days
+          maxAge: 336 * 60 * 60 * 1000,
           httpOnly: true,
           sameSite: "lax",
           secure: process.env.NODE_ENV === "production",
@@ -110,16 +102,12 @@ module.exports.launch = async (client) => {
     .use(async (req, res, next) => {
       req.user = req.session.user;
       req.client = client;
-
-      // CSRF protection: enabled for state-changing requests (except Discord OAuth endpoints)
       next();
     });
 
   const csrfProtection = csrf({ cookie: false });
 
-  // Attach userInfos for templates and ensure dashboard user record exists
   app.use(async (req, res, next) => {
-    // Render helpers
     res.locals.baseURL = client.config.DASHBOARD.baseURL;
     res.locals.currentURL = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
     res.locals.brand = { name: "Bright", byline: "built by TheCeoTyro" };
@@ -131,17 +119,15 @@ module.exports.launch = async (client) => {
         req.userInfos = null;
       }
     }
-
     next();
   });
 
-  // Health check (no auth)
   app.get("/health", healthRouter(client, db));
 
-  // Discord OAuth (no CSRF)
+  // OAuth routes (no CSRF)
   app.use("/api", discordAuthRouter);
 
-  // CSRF for our API routes (excluding OAuth)
+  // CSRF for API (excluding OAuth endpoints)
   app.use(
     "/api",
     (req, res, next) => {
@@ -149,42 +135,32 @@ module.exports.launch = async (client) => {
       return csrfProtection(req, res, next);
     },
     (req, res, next) => {
-      // Expose token in response header for SPA-like fetches
       res.setHeader("X-CSRF-Token", req.csrfToken ? req.csrfToken() : "");
       return next();
     },
     apiRouter
   );
 
-  // Legacy routes
   app.use("/logout", logoutRouter);
   app.use("/manage", guildManagerRouter);
   app.use("/news", newsRouter);
 
-  // New app pages
   app.use("/app", CheckAuth, appPagesRouter);
 
-  // Keep existing simple pages
   app.use("/", mainRouter);
 
-  // 404
   app.use(CheckAuth, (req, res) => {
-    res.status(404).render("404", {
-      user: req.userInfos,
-    });
+    res.status(404).render("404", { user: req.userInfos });
   });
 
-  // 500
   // eslint-disable-next-line no-unused-vars
   app.use(CheckAuth, (err, req, res, next) => {
     console.error(err.stack);
     if (!req.user) return res.redirect("/");
-    res.status(500).render("500", {
-      user: req.userInfos,
-    });
+    res.status(500).render("500", { user: req.userInfos });
   });
 
   app.listen(port, "0.0.0.0", () => {
-    client.logger.success(`Dashboard is listening on HTTP port ${port} (handled by NGINX HTTPS)`);
+    client.logger.success(`Dashboard is listening on port ${port}`);
   });
 };
