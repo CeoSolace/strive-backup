@@ -1,3 +1,4 @@
+// bot.js
 require("dotenv").config();
 require("module-alias/register");
 
@@ -30,15 +31,25 @@ client.loadSecurityModules("src/security");
 client.omniLogger = new OmniDiscordLogger(client);
 
 // unhandled rejections
-process.on("unhandledRejection", (err) =>
-  client.logger.error("Unhandled promise rejection", err)
-);
+process.on("unhandledRejection", (err) => client.logger.error("Unhandled promise rejection", err));
 
 (async () => {
-  // update check
-  await checkForUpdates();
+  // update check (non-fatal)
+  try {
+    await checkForUpdates();
+  } catch (e) {
+    client.logger.error("VersionCheck: Failed to check for bot updates", e);
+  }
 
-  // dashboard / db
+  // ✅ ALWAYS initialize MongoDB for bot features (giveaways, reaction roles, etc.)
+  try {
+    await initializeMongoose();
+    client.logger.success("Database connected");
+  } catch (e) {
+    client.logger.error("Database connection failed (bot features may break)", e);
+  }
+
+  // dashboard (optional)
   if (client.config.DASHBOARD.enabled) {
     client.logger.log("Launching dashboard");
     try {
@@ -46,9 +57,8 @@ process.on("unhandledRejection", (err) =>
       await launch(client);
     } catch (ex) {
       client.logger.error("Failed to launch dashboard", ex);
+      // Bot keeps running even if dashboard fails
     }
-  } else {
-    await initializeMongoose();
   }
 
   // login
@@ -76,7 +86,7 @@ process.on("unhandledRejection", (err) =>
     client.logger.error("Failed to register /annouce command", err);
   }
 
-  // register remaining commands (if you still want auto-loading)
+  // register remaining commands
   try {
     client.logger.log("Registering global slash commands...");
     await client.registerInteractions();
