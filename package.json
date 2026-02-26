@@ -3,7 +3,7 @@
   "version": "5.6.0",
   "description": "An open-source, multipurpose discord bot built using discord-js",
   "main": "bot.js",
-  "author": "Tyro",
+  "author": "Sai Teja M",
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
@@ -40,6 +40,7 @@
     "discord.js": "^14.14.1",
     "dotenv": "^16.4.7",
     "ejs": "^3.1.10",
+    "ejs-mate": "^4.0.0",
     "enhanced-ms": "^2.3.0",
     "express": "^4.21.2",
     "express-rate-limit": "^8.2.1",
