@@ -32,58 +32,81 @@ router.get("/servers", async (req, res) => {
   });
 });
 
+// Modules page: list guilds and link to manage page. No placeholders.
 router.get("/modules", async (req, res) => {
-  return page(res, "app/placeholder", "Modules", {
+  return page(res, "app/modules", "Modules", {
     user: req.userInfos,
-    placeholder: {
-      title: "Modules",
-      description: "Enable and configure Bright modules per server.",
-      icon: "puzzle",
-    },
   });
 });
 
+// Commands page: list guilds and link to manage page. No placeholders.
 router.get("/commands", async (req, res) => {
-  return page(res, "app/placeholder", "Commands", {
+  return page(res, "app/commands", "Commands", {
     user: req.userInfos,
-    placeholder: {
-      title: "Commands",
-      description: "Browse and customize command behavior.",
-      icon: "terminal",
-    },
   });
 });
 
+// Automations page: list guilds and link to manage page. No placeholders.
 router.get("/automations", async (req, res) => {
-  return page(res, "app/placeholder", "Automations", {
+  return page(res, "app/automations", "Automations", {
     user: req.userInfos,
-    placeholder: {
-      title: "Automations",
-      description: "Create automations and scheduled actions.",
-      icon: "zap",
-    },
   });
 });
 
+// Logs page: display audit logs for the current user. Supports optional pagination via query params.
 router.get("/logs", async (req, res) => {
-  return page(res, "app/placeholder", "Logs", {
+  const AuditLog = require("../models/AuditLog");
+  const discordId = req.session.user?.id;
+  const pageNum = Math.max(1, Number(req.query.page || 1));
+  const limit = 20;
+  const skip = (pageNum - 1) * limit;
+  const filter = { discordId };
+  if (req.query.guildId) {
+    filter.guildId = req.query.guildId;
+  }
+  let logs = { items: [] };
+  try {
+    const items = await AuditLog.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+    logs.items = items;
+  } catch (e) {
+    console.error(e);
+  }
+  return page(res, "app/logs", "Logs", {
     user: req.userInfos,
-    placeholder: {
-      title: "Logs",
-      description: "Audit bot activity and configuration changes.",
-      icon: "scroll",
-    },
+    logs,
   });
 });
 
+// Analytics page: compute simple analytics for the user.
 router.get("/analytics", async (req, res) => {
-  return page(res, "app/placeholder", "Analytics", {
+  const AuditLog = require("../models/AuditLog");
+  const Automation = require("../models/Automation");
+  const discordId = req.session.user?.id;
+  const guilds = req.userInfos?.guilds || [];
+  const adminGuilds = guilds.filter((g) => g.admin);
+  const guildIds = adminGuilds.map((g) => g.id);
+  const analytics = {
+    guildCount: adminGuilds.length,
+    settingsChanges: 0,
+    automationsCount: 0,
+    modulesChanged: 0,
+    commandsChanged: 0,
+  };
+  try {
+    analytics.settingsChanges = await AuditLog.countDocuments({ discordId, action: "update_settings" });
+    analytics.modulesChanged = await AuditLog.countDocuments({ discordId, action: "toggle_module" });
+    analytics.commandsChanged = await AuditLog.countDocuments({ discordId, action: "toggle_command" });
+    analytics.automationsCount = await Automation.countDocuments({ guildId: { $in: guildIds } });
+  } catch (e) {
+    console.error(e);
+  }
+  return page(res, "app/analytics", "Analytics", {
     user: req.userInfos,
-    placeholder: {
-      title: "Analytics",
-      description: "Usage insights and operational analytics.",
-      icon: "chart",
-    },
+    analytics,
   });
 });
 
@@ -100,24 +123,14 @@ router.get("/privacy-consent", async (req, res) => {
 });
 
 router.get("/settings", async (req, res) => {
-  return page(res, "app/placeholder", "Settings", {
+  return page(res, "app/settings", "Settings", {
     user: req.userInfos,
-    placeholder: {
-      title: "Settings",
-      description: "Dashboard preferences and integrations.",
-      icon: "settings",
-    },
   });
 });
 
 router.get("/billing", async (req, res) => {
-  return page(res, "app/placeholder", "Billing", {
+  return page(res, "app/billing", "Billing", {
     user: req.userInfos,
-    placeholder: {
-      title: "Billing",
-      description: "Billing is coming soon.",
-      icon: "creditcard",
-    },
   });
 });
 
