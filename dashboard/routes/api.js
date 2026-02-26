@@ -177,4 +177,114 @@ router.get("/consent/history", CheckAuth, async (req, res) => {
   return res.json({ page, limit, total, items });
 });
 
+/**
+ * POST /api/account/export
+ * Export the user's dashboard-related data (dashboard user record, consent preferences, consent history).
+ */
+router.post("/account/export", CheckAuth, async (req, res) => {
+  const discordId = req.session.user.id;
+  try {
+    // Fetch dashboard user record (excluding internal fields)
+    const userRecord = await DashboardUser.findOne({ discordId }).lean();
+    // Fetch current consent
+    const consent = await UserConsent.findOne({ discordId }).lean();
+    // Fetch consent audit events
+    const history = await ConsentAuditEvent.find({ discordId }).sort({ changedAt: 1 }).lean();
+    // Build export payload
+    return res.json({
+      discord: {
+        id: req.session.user.id,
+        username: req.session.user.username,
+        discriminator: req.session.user.discriminator,
+        email: req.session.user.email || null,
+      },
+      dashboardUser: userRecord
+        ? {
+            discordId: userRecord.discordId,
+            username: userRecord.username,
+            avatar: userRecord.avatar,
+            discriminator: userRecord.discriminator,
+            createdAt: userRecord.createdAt,
+            updatedAt: userRecord.updatedAt,
+          }
+        : null,
+      consent: consent
+        ? {
+            version: consent.version,
+            essential: true,
+            analytics: !!consent.analytics,
+            diagnostics: !!consent.diagnostics,
+            training: !!consent.training,
+            marketing: !!consent.marketing,
+            updatedAt: consent.updatedAt,
+            source: consent.source,
+          }
+        : null,
+      consentHistory: history.map((ev) => ({
+        changedAt: ev.changedAt,
+        changes: ev.changes,
+        version: ev.version,
+        actor: ev.actor,
+        userAgent: ev.userAgent,
+      })),
+    });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to export data" });
+  }
+});
+
+/**
+ * POST /api/account/delete
+ * Delete the user's dashboard-only data: consent, audit history, and dashboard user record.
+ */
+router.post("/account/delete", CheckAuth, async (req, res) => {
+  const discordId = req.session.user.id;
+  // Validate payload: confirm must equal 'DELETE'
+  const schema = z
+    .object({
+      confirm: z.literal("DELETE"),
+    })
+    .strict();
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+  }
+  try {
+    // Remove consent and audit events and dashboard user record
+    await Promise.all([
+      UserConsent.deleteOne({ discordId }),
+      ConsentAuditEvent.deleteMany({ discordId }),
+      DashboardUser.deleteOne({ discordId }),
+    ]);
+    // Destroy session to sign the user out
+    req.session.destroy(() => {});
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to delete account data" });
+  }
+});
+
+/**
+ * POST /api/account/signout-all
+ * Invalidate all sessions by bumping the sessionVersion on the dashboard user record.
+ */
+router.post("/account/signout-all", CheckAuth, async (req, res) => {
+  const discordId = req.session.user.id;
+  try {
+    const user = await DashboardUser.findOne({ discordId });
+    if (user) {
+      user.sessionVersion = (user.sessionVersion || 1) + 1;
+      await user.save();
+    }
+    // Destroy current session so user must log in again
+    req.session.destroy(() => {});
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to sign out sessions" });
+  }
+});
+
 module.exports = router;
