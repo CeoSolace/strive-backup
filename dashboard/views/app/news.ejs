@@ -1,0 +1,127 @@
+<% layout('layouts/app') -%>
+
+<div class="flex flex-col gap-6">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight">News</h1>
+    <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">Latest announcements and updates.</p>
+    <% if (isAdmin) { %>
+    <button id="newPostBtn" class="btn btn-secondary mt-3">New post</button>
+    <% } %>
+  </div>
+  <% if (posts && posts.length > 0) { %>
+  <div class="space-y-4">
+    <% posts.forEach(function(post) { %>
+      <article class="card">
+        <div class="flex items-start justify-between gap-2">
+          <div>
+            <h2 class="text-lg font-semibold"><%= post.title %></h2>
+            <p class="text-xs text-zinc-500 dark:text-zinc-400"><%= new Date(post.createdAt).toLocaleString() %></p>
+          </div>
+          <% if (isAdmin) { %>
+          <div class="flex gap-2">
+            <button class="btn btn-ghost btn-sm editBtn" data-id="<%= post._id %>" data-title="<%- post.title %>" data-content="<%- post.content %>">Edit</button>
+            <button class="btn btn-ghost btn-sm deleteBtn" data-id="<%= post._id %>">Delete</button>
+          </div>
+          <% } %>
+        </div>
+        <div class="mt-2 whitespace-pre-line text-sm text-zinc-700 dark:text-zinc-300"><%= post.content %></div>
+      </article>
+    <% }); %>
+  </div>
+  <% } else { %>
+  <div class="rounded-2xl border border-zinc-200 p-6 text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
+    No news posts yet.
+  </div>
+  <% } %>
+</div>
+
+<script>
+  // Helper to fetch CSRF token
+  async function getCsrf() {
+    const res = await fetch('/api/csrf', { credentials: 'same-origin' });
+    const data = await res.json();
+    return data.csrfToken;
+  }
+  <% if (isAdmin) { %>
+  function refreshPage() {
+    location.reload();
+  }
+  // New post creation
+  const newBtn = document.getElementById('newPostBtn');
+  if (newBtn) {
+    newBtn.addEventListener('click', async () => {
+      const title = prompt('Enter title for the post');
+      if (!title) return;
+      const content = prompt('Enter content for the post');
+      if (!content) return;
+      try {
+        const csrf = await getCsrf();
+        await fetch('/api/news', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+          body: JSON.stringify({ title, content }),
+        });
+        refreshPage();
+      } catch (e) {
+        alert('Failed to create post');
+      }
+    });
+  }
+  // Edit post function
+  function editPost(id, currentTitle, currentContent) {
+    const title = prompt('Edit title', currentTitle || '');
+    if (title === null) return;
+    const content = prompt('Edit content', currentContent || '');
+    if (content === null) return;
+    (async () => {
+      try {
+        const csrf = await getCsrf();
+        await fetch('/api/news/' + id, {
+          method: 'PUT',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+          body: JSON.stringify({ title, content }),
+        });
+        refreshPage();
+      } catch (e) {
+        alert('Failed to update post');
+      }
+    })();
+  }
+  // Delete post function
+  function deletePost(id) {
+    if (!confirm('Are you sure you want to delete this post?')) return;
+    (async () => {
+      try {
+        const csrf = await getCsrf();
+        await fetch('/api/news/' + id, {
+          method: 'DELETE',
+          credentials: 'same-origin',
+          headers: { 'X-CSRF-Token': csrf },
+        });
+        refreshPage();
+      } catch (e) {
+        alert('Failed to delete post');
+      }
+    })();
+  }
+  // Attach handlers to existing edit/delete buttons
+  document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.editBtn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        const id = this.dataset.id;
+        const title = this.dataset.title;
+        const content = this.dataset.content;
+        editPost(id, title, content);
+      });
+    });
+    document.querySelectorAll('.deleteBtn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        const id = this.dataset.id;
+        deletePost(id);
+      });
+    });
+  });
+  <% } %>
+</script>
