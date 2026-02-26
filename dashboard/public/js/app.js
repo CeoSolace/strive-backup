@@ -249,6 +249,12 @@
 
     const handle = async (mode) => {
       try {
+        // Ensure CSRF token exists (in case bootstrap hasn't completed)
+        if (!state.csrf) {
+          const csrf = await api('/api/csrf');
+          state.csrf = csrf.csrfToken;
+        }
+
         if (mode === 'customize') {
           window.location.href = '/app/privacy-consent';
           return;
@@ -280,7 +286,12 @@
           });
         }
 
+        // Hide immediately
         banner.classList.add('hidden');
+
+        // Optimistically mark as chosen to avoid re-showing on slow networks
+        if (state.consent) state.consent.hasChoice = true;
+
         state.consent = await api('/api/consent');
         hydrateConsent();
         hydrateOverviewStats();
