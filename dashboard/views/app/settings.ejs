@@ -1,0 +1,74 @@
+<% layout('layouts/app') -%>
+
+<div class="flex flex-col gap-6">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight">Settings</h1>
+    <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">Manage your dashboard preferences.</p>
+  </div>
+  <section class="card">
+    <div class="card-title">Preferences</div>
+    <div class="mt-4 space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300" for="defaultGuild">Default guild</label>
+        <select id="defaultGuild" class="mt-1 w-full rounded-md border border-zinc-300 p-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
+          <option value="">— None —</option>
+          <% if (user?.displayedGuilds) { user.displayedGuilds.forEach(function(g) { %>
+            <option value="<%= g.id %>"><%= g.name %></option>
+          <% }); } %>
+        </select>
+      </div>
+      <div class="flex items-center gap-3">
+        <input id="emailExport" type="checkbox" class="h-4 w-4 rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-700" />
+        <label for="emailExport" class="text-sm text-zinc-700 dark:text-zinc-300">Email me data export confirmations</label>
+      </div>
+      <button id="savePrefs" class="btn btn-secondary">Save preferences</button>
+      <div id="prefsStatus" class="mt-2 text-sm text-zinc-600 dark:text-zinc-300"></div>
+    </div>
+  </section>
+</div>
+
+<script>
+  // Fetch and hydrate preferences
+  (async function() {
+    try {
+      const res = await fetch('/api/user/preferences', { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('Failed to load preferences');
+      const data = await res.json();
+      if (data.preferences) {
+        const def = data.preferences.defaultGuild || '';
+        document.getElementById('defaultGuild').value = def;
+        document.getElementById('emailExport').checked = !!data.preferences.emailExport;
+      }
+    } catch (e) {
+      document.getElementById('prefsStatus').textContent = 'Could not load preferences.';
+    }
+  })();
+
+  document.getElementById('savePrefs').addEventListener('click', async function() {
+    const defaultGuild = document.getElementById('defaultGuild').value || null;
+    const emailExport = document.getElementById('emailExport').checked;
+    try {
+      // obtain CSRF token first
+      const csrfRes = await fetch('/api/csrf', { credentials: 'same-origin' });
+      const csrfData = await csrfRes.json();
+      const token = csrfData.csrfToken;
+      const res = await fetch('/api/user/preferences', {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': token
+        },
+        body: JSON.stringify({ defaultGuild, emailExport })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        document.getElementById('prefsStatus').textContent = err.error || 'Failed to save';
+      } else {
+        document.getElementById('prefsStatus').textContent = 'Preferences saved.';
+      }
+    } catch (e) {
+      document.getElementById('prefsStatus').textContent = 'Save failed.';
+    }
+  });
+</script>
