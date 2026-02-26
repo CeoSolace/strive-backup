@@ -53,15 +53,21 @@
     }
   }
 
+  function isConsentSuppressedByPage() {
+    const p = window.location.pathname || '';
+    return (
+      p.startsWith('/app/privacy-consent') ||
+      p.startsWith('/privacy') ||
+      p.startsWith('/tos')
+    );
+  }
+
   async function api(path, opts = {}) {
     const headers = Object.assign(
-      {
-        'Content-Type': 'application/json',
-      },
+      { 'Content-Type': 'application/json' },
       opts.headers || {}
     );
 
-    // Attach CSRF token for state-changing requests
     const method = (opts.method || 'GET').toUpperCase();
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && state.csrf) {
       headers['X-CSRF-Token'] = state.csrf;
@@ -73,7 +79,6 @@
       headers,
     });
 
-    // Refresh CSRF from response header when present
     const newCsrf = res.headers.get('X-CSRF-Token');
     if (newCsrf) state.csrf = newCsrf;
 
@@ -135,7 +140,6 @@
 
     btn.addEventListener('click', async () => {
       try {
-        // Use fixed invite URL as configured by the dashboard requirements.
         const url =
           'https://discord.com/api/oauth2/authorize?client_id=1457843538401300480&scope=bot+applications.commands&permissions=8';
         window.open(url, '_blank', 'noopener,noreferrer');
@@ -147,14 +151,13 @@
 
   async function bootstrap() {
     try {
-      // Fetch CSRF token (also primes header refresh)
       const csrf = await api('/api/csrf');
       state.csrf = csrf.csrfToken;
 
       state.me = await api('/api/me');
       hydrateMe();
 
-      // Pre-hydrate consent from cookie to avoid banner flicker
+      // Pre-hydrate consent from cookie to avoid flicker
       const cookie = readConsentCookie();
       if (cookie && cookie.v) {
         state.consent = {
@@ -175,14 +178,16 @@
 
       state.consent = await api('/api/consent');
       hydrateConsent();
-      maybeShowConsentBanner();
+
+      // ✅ DO NOT overlay on privacy/tos pages
+      if (!isConsentSuppressedByPage()) {
+        maybeShowConsentBanner();
+      }
 
       hydrateOverviewStats();
-
       setupConsentPage();
       setupAccountPage();
     } catch (e) {
-      // If auth fails, the server will redirect; otherwise show banner
       toast('Something went wrong', e.message, 'error');
     }
   }
@@ -206,7 +211,6 @@
     if (!state.consent) return;
     const consent = state.consent.consent;
 
-    // Toggle inputs on privacy page
     $$('[data-consent-toggle]').forEach((el) => {
       const key = el.getAttribute('data-consent-toggle');
       el.checked = !!consent[key];
@@ -223,7 +227,6 @@
     }
 
     const enabled = consentEnabledCount(consent);
-
     if (summary) summary.textContent = `${enabled} of 5 enabled`;
     if (enabledCount) enabledCount.textContent = String(enabled);
   }
@@ -243,13 +246,14 @@
     const banner = $('#consent-banner');
     if (!banner || !state.consent) return;
 
-    if (state.consent.hasChoice) return; // already decided
+    // ✅ Never show banner on privacy/tos pages
+    if (isConsentSuppressedByPage()) return;
 
+    if (state.consent.hasChoice) return;
     banner.classList.remove('hidden');
 
     const handle = async (mode) => {
       try {
-        // Ensure CSRF token exists (in case bootstrap hasn't completed)
         if (!state.csrf) {
           const csrf = await api('/api/csrf');
           state.csrf = csrf.csrfToken;
@@ -279,17 +283,14 @@
             body: JSON.stringify({
               analytics: true,
               diagnostics: true,
-              training: false, // opt-in only; keep false even on accept all
+              training: false,
               marketing: true,
               source: 'banner',
             }),
           });
         }
 
-        // Hide immediately
         banner.classList.add('hidden');
-
-        // Optimistically mark as chosen to avoid re-showing on slow networks
         if (state.consent) state.consent.hasChoice = true;
 
         state.consent = await api('/api/consent');
@@ -302,7 +303,7 @@
     };
 
     $$('[data-consent-action]').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', () => {
         const mode = btn.getAttribute('data-consent-action');
         handle(mode);
       });
@@ -320,7 +321,6 @@
           payload[el.getAttribute('data-consent-toggle')] = !!el.checked;
         });
 
-        // training must be opt-in: allow true only if user checked.
         await api('/api/consent', {
           method: 'PUT',
           body: JSON.stringify(payload),
@@ -481,11 +481,9 @@
   }
 
   function setupGlobalInteractions() {
-    // Theme
     const themeBtn = $('[data-action="toggle-theme"]');
     if (themeBtn) themeBtn.addEventListener('click', toggleTheme);
 
-    // Search (placeholder)
     const search = $('[data-global-search]');
     if (search) {
       search.addEventListener('keydown', (e) => {
@@ -495,7 +493,6 @@
       });
     }
 
-    // Mobile nav: clone desktop sidebar into overlay
     const openMobile = $('[data-action="open-mobile-nav"]');
     if (openMobile) {
       openMobile.addEventListener('click', () => {
