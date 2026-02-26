@@ -8,6 +8,7 @@
       <p class="mt-0.5 text-sm text-zinc-600 dark:text-zinc-300">Manage server settings and features.</p>
     </div>
   </div>
+
   <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
     <a class="action" href="?tab=modules">
       <div class="action-title">Modules</div>
@@ -19,160 +20,390 @@
     </a>
     <a class="action" href="?tab=automations">
       <div class="action-title">Automations</div>
-      <div class="action-sub">Manage automations</div>
+      <div class="action-sub">Build trigger → conditions → actions</div>
     </a>
   </div>
-  <div>
-    <% if (tab === 'modules') { %>
-      <section class="card">
-        <div class="card-title">Modules</div>
-        <div id="modulesList" class="mt-4 space-y-2 text-sm"></div>
-      </section>
-    <% } else if (tab === 'commands') { %>
-      <section class="card">
-        <div class="card-title">Commands</div>
-        <div id="commandsList" class="mt-4 space-y-2 text-sm"></div>
-      </section>
-    <% } else if (tab === 'automations') { %>
-      <section class="card">
-        <div class="card-title">Automations</div>
-        <div id="automationsList" class="mt-4 space-y-2 text-sm"></div>
-        <button id="newAutomationBtn" class="btn btn-secondary mt-4">Add automation</button>
-      </section>
-    <% } else { %>
-      <section class="card">
-        <div class="card-title">Overview</div>
-        <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">Use the links above to configure modules, commands and automations.</p>
-      </section>
-    <% } %>
-  </div>
+
+  <% if (tab === 'automations') { %>
+    <section class="card">
+      <div class="card-title">Automations</div>
+      <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
+        Stored as compact numbers (1–18) + tiny params (message text, ids). Max 9 steps per automation.
+      </p>
+
+      <div class="mt-4 grid gap-4 lg:grid-cols-3">
+        <div class="lg:col-span-1">
+          <div class="flex items-center justify-between gap-2">
+            <div class="text-sm font-semibold">Your automations</div>
+            <button id="autoNew" class="btn btn-secondary btn-sm">New</button>
+          </div>
+          <div id="autoList" class="mt-3 space-y-2"></div>
+        </div>
+
+        <div class="lg:col-span-2">
+          <div class="flex items-center justify-between gap-2">
+            <div class="text-sm font-semibold">Builder</div>
+            <div class="flex gap-2">
+              <button id="autoSave" class="btn btn-secondary btn-sm" disabled>Save</button>
+              <button id="autoDelete" class="btn btn-ghost btn-sm" disabled>Delete</button>
+            </div>
+          </div>
+
+          <div class="mt-3 rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800">
+            <div class="text-xs font-semibold uppercase tracking-wider text-zinc-500">Name</div>
+            <input id="autoName" class="mt-2 w-full rounded-md border border-zinc-300 p-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" placeholder="e.g. Welcome + Role" />
+
+            <div class="mt-4 flex items-center gap-3">
+              <input id="autoEnabled" type="checkbox" class="h-4 w-4 rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-700" />
+              <label for="autoEnabled" class="text-sm text-zinc-700 dark:text-zinc-300">Enabled</label>
+            </div>
+
+            <div class="mt-6 grid gap-3">
+              <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-zinc-500">Trigger (exactly 1)</div>
+                <div id="triggerSlot" class="mt-2"></div>
+              </div>
+
+              <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-zinc-500">Conditions (optional)</div>
+                <div id="conditionsSlot" class="mt-2 space-y-2"></div>
+                <button id="addCondition" class="btn btn-ghost btn-sm mt-2">Add condition</button>
+              </div>
+
+              <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-zinc-500">Actions (at least 1)</div>
+                <div id="actionsSlot" class="mt-2 space-y-2"></div>
+                <button id="addAction" class="btn btn-ghost btn-sm mt-2">Add action</button>
+              </div>
+
+              <div class="mt-2 text-xs text-zinc-500 dark:text-zinc-400" id="autoHint"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  <% } else { %>
+    <section class="card">
+      <div class="card-title">Overview</div>
+      <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">Use the cards above to configure this server.</p>
+    </section>
+  <% } %>
 </div>
 
 <script>
-  // Determine current tab and guild ID
-  const tab = '<%= tab || '' %>';
+  const tab = '<%= tab || "" %>';
   const guildId = '<%= guild.id %>';
+
   async function getCsrf() {
     const res = await fetch('/api/csrf', { credentials: 'same-origin' });
     const data = await res.json();
     return data.csrfToken;
   }
-  async function loadModules() {
-    const res = await fetch(`/api/guild/${guildId}/modules`, { credentials: 'same-origin' });
-    const data = await res.json();
-    const container = document.getElementById('modulesList');
-    container.innerHTML = '';
-    const csrf = await getCsrf();
-    data.availableModules.forEach((m) => {
-      const enabled = data.enabled[m];
-      const div = document.createElement('div');
-      div.className = 'flex items-center gap-3';
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.checked = !!enabled;
-      checkbox.id = `mod-${m}`;
-      const label = document.createElement('label');
-      label.textContent = m;
-      label.htmlFor = checkbox.id;
-      checkbox.addEventListener('change', async () => {
-        try {
-          await fetch(`/api/guild/${guildId}/modules`, {
-            method: 'PUT',
-            credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
-            body: JSON.stringify({ module: m, enabled: checkbox.checked }),
-          });
-        } catch (ex) {
-          console.error('Failed to update module', ex);
-        }
-      });
-      div.appendChild(checkbox);
-      div.appendChild(label);
-      container.appendChild(div);
+
+  const MAX_FUNCS = 9;
+  let catalog = null;
+  let autos = [];
+  let selected = null;
+  let draft = null;
+
+  function el(tag, cls){ const e=document.createElement(tag); if(cls) e.className=cls; return e; }
+  function setHint(msg){ const h=document.getElementById('autoHint'); if(h) h.textContent=msg||''; }
+
+  function buildSelect(options, value){
+    const s=el('select','w-full rounded-md border border-zinc-300 p-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100');
+    options.forEach((opt)=>{
+      const o=document.createElement('option');
+      o.value=String(opt.id);
+      o.textContent=`${opt.id} — ${opt.label}`;
+      if(String(value)===String(opt.id)) o.selected=true;
+      s.appendChild(o);
     });
+    return s;
   }
-  async function loadCommands() {
-    const res = await fetch(`/api/guild/${guildId}/commands`, { credentials: 'same-origin' });
-    const data = await res.json();
-    const container = document.getElementById('commandsList');
-    container.innerHTML = '';
-    const csrf = await getCsrf();
-    data.availableCommands.forEach((c) => {
-      const enabled = data.enabled[c];
-      const div = document.createElement('div');
-      div.className = 'flex items-center gap-3';
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.checked = !!enabled;
-      checkbox.id = `cmd-${c}`;
-      const label = document.createElement('label');
-      label.textContent = c;
-      label.htmlFor = checkbox.id;
-      checkbox.addEventListener('change', async () => {
-        try {
-          await fetch(`/api/guild/${guildId}/commands`, {
-            method: 'PUT',
-            credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
-            body: JSON.stringify({ command: c, enabled: checkbox.checked }),
-          });
-        } catch (ex) {
-          console.error('Failed to update command', ex);
-        }
-      });
-      div.appendChild(checkbox);
-      div.appendChild(label);
-      container.appendChild(div);
-    });
+
+  function paramInput(key, val, placeholder){
+    const i=el('input','w-full rounded-md border border-zinc-300 p-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100');
+    i.value=val||''; i.placeholder=placeholder||'';
+    return i;
   }
-  async function loadAutomations() {
-    const res = await fetch(`/api/guild/${guildId}/automations`, { credentials: 'same-origin' });
-    const data = await res.json();
-    const container = document.getElementById('automationsList');
-    if (!container) return;
-    container.innerHTML = '';
-    data.items.forEach((auto) => {
-      const div = document.createElement('div');
-      div.className = 'flex items-center justify-between gap-3';
-      const details = document.createElement('div');
-      details.innerHTML = `<strong>${auto.name}</strong><br/><span class="text-xs text-zinc-600 dark:text-zinc-400">${auto.schedule} – ${auto.action}</span>`;
-      const delBtn = document.createElement('button');
-      delBtn.className = 'btn btn-ghost btn-sm';
-      delBtn.textContent = 'Delete';
-      delBtn.addEventListener('click', async () => {
-        const csrf = await getCsrf();
-        await fetch(`/api/guild/${guildId}/automations/${auto._id}`, {
-          method: 'DELETE',
-          credentials: 'same-origin',
-          headers: { 'X-CSRF-Token': csrf },
+
+  function renderStepCard(title, opts){
+    const wrap=el('div','rounded-xl border border-zinc-200 p-3 dark:border-zinc-800');
+    const top=el('div','flex items-center justify-between gap-2');
+    const left=el('div');
+    left.appendChild(Object.assign(el('div','text-sm font-semibold'),{textContent:title}));
+    left.appendChild(Object.assign(el('div','text-xs text-zinc-500 dark:text-zinc-400'),{textContent:'Stored as: function ID + tiny params'}));
+    top.appendChild(left);
+
+    if(opts.onRemove){
+      const rm=el('button','btn btn-ghost btn-sm');
+      rm.textContent='Remove';
+      rm.addEventListener('click', opts.onRemove);
+      top.appendChild(rm);
+    }
+    wrap.appendChild(top);
+
+    const select=buildSelect(opts.functions, opts.value);
+    wrap.appendChild(Object.assign(el('div','mt-3 text-xs font-semibold uppercase tracking-wider text-zinc-500'),{textContent:'Function'}));
+    wrap.appendChild(el('div','mt-2')).appendChild(select);
+    select.addEventListener('change', ()=>opts.onChangeFn(Number(select.value)));
+
+    const def=opts.getDef(Number(select.value));
+    if(def.params && def.params.length){
+      wrap.appendChild(Object.assign(el('div','mt-3 text-xs font-semibold uppercase tracking-wider text-zinc-500'),{textContent:'Params'}));
+      const pw=el('div','mt-2 space-y-2');
+      def.params.forEach((k)=>{
+        const placeholder =
+          k==='t'?'message text…':
+          k==='c'?'channel id…':
+          k==='r'?'role id…':
+          k==='x'?'regex…':
+          k==='s'?'seconds…':
+          k==='k'?'schedule…':
+          k==='e'?'emoji…':
+          k==='b'?'button key…':'';
+        const input=paramInput(k, (opts.params||{})[k], placeholder);
+        input.addEventListener('input', ()=>{
+          const p=Object.assign({}, opts.params||{});
+          p[k]=input.value;
+          opts.onChangeParams(p);
         });
-        loadAutomations();
+        pw.appendChild(input);
       });
-      div.appendChild(details);
-      div.appendChild(delBtn);
-      container.appendChild(div);
+      wrap.appendChild(pw);
+    }
+    return wrap;
+  }
+
+  function countSteps(d){ return (d.trigger?1:0)+(d.conditions?.length||0)+(d.actions?.length||0); }
+  function encodePlan(d){
+    const f=[],p=[];
+    if(d.trigger){ f.push(d.trigger.id); p.push(d.trigger.params||{}); }
+    (d.conditions||[]).forEach(x=>{f.push(x.id); p.push(x.params||{});});
+    (d.actions||[]).forEach(x=>{f.push(x.id); p.push(x.params||{});});
+    return {f,p};
+  }
+  function validateDraft(d){
+    const steps=countSteps(d);
+    if(!d.name||!d.name.trim()) return {ok:false,msg:'Name is required'};
+    if(!d.trigger) return {ok:false,msg:'Exactly one trigger required'};
+    if((d.actions||[]).length<1) return {ok:false,msg:'At least one action required'};
+    if(steps>MAX_FUNCS) return {ok:false,msg:`Max ${MAX_FUNCS} steps allowed`};
+    return {ok:true,msg:''};
+  }
+
+  function renderAutomationList(){
+    const list=document.getElementById('autoList'); list.innerHTML='';
+    autos.forEach((a)=>{
+      const row=el('button','w-full rounded-xl border border-zinc-200 p-3 text-left hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900');
+      if(selected && String(selected._id)===String(a._id)) row.classList.add('ring-2','ring-brand-500/30');
+
+      const top=el('div','flex items-center justify-between gap-2');
+      const nm=el('div','text-sm font-semibold truncate'); nm.textContent=a.name;
+      const badge=el('span','text-[11px] rounded-full px-2 py-0.5 '+(a.enabled?'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200':'bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300'));
+      badge.textContent=a.enabled?'Enabled':'Disabled';
+      top.appendChild(nm); top.appendChild(badge);
+
+      const sub=el('div','mt-1 text-xs text-zinc-500 dark:text-zinc-400');
+      sub.textContent=`Steps: ${(a.f||[]).length} • Updated: ${new Date(a.updatedAt).toLocaleString()}`;
+      row.appendChild(top); row.appendChild(sub);
+      row.addEventListener('click', ()=>selectAutomation(a._id));
+      list.appendChild(row);
     });
   }
-  if (tab === 'modules') loadModules();
-  if (tab === 'commands') loadCommands();
-  if (tab === 'automations') loadAutomations();
-  const newBtn = document.getElementById('newAutomationBtn');
-  if (newBtn) {
-    newBtn.addEventListener('click', async () => {
-      const name = prompt('Name of automation');
-      if (!name) return;
-      const schedule = prompt('Schedule (e.g. every day at 9am)');
-      if (!schedule) return;
-      const action = prompt('Action');
-      if (!action) return;
-      const csrf = await getCsrf();
-      await fetch(`/api/guild/${guildId}/automations`, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
-        body: JSON.stringify({ name, schedule, action }),
-      });
-      loadAutomations();
+
+  function refreshButtons(){
+    const save=document.getElementById('autoSave');
+    const del=document.getElementById('autoDelete');
+    const v=validateDraft(draft);
+    save.disabled=!v.ok;
+    del.disabled=!selected;
+    setHint(v.ok?`OK — Steps used: ${countSteps(draft)}/${MAX_FUNCS}`:v.msg);
+  }
+
+  function renderBuilder(){
+    const name=document.getElementById('autoName');
+    const enabled=document.getElementById('autoEnabled');
+
+    if(!draft){
+      name.value=''; enabled.checked=true;
+      document.getElementById('triggerSlot').innerHTML='';
+      document.getElementById('conditionsSlot').innerHTML='';
+      document.getElementById('actionsSlot').innerHTML='';
+      document.getElementById('autoSave').disabled=true;
+      document.getElementById('autoDelete').disabled=true;
+      setHint('Select or create an automation.');
+      return;
+    }
+
+    name.value=draft.name||'';
+    enabled.checked=!!draft.enabled;
+    name.oninput=()=>{ draft.name=name.value; refreshButtons(); };
+    enabled.onchange=()=>{ draft.enabled=enabled.checked; refreshButtons(); };
+
+    const triggers=catalog.functions.filter(x=>x.cat==='TRIGGER');
+    const conds=catalog.functions.filter(x=>x.cat==='CONDITION');
+    const acts=catalog.functions.filter(x=>x.cat==='ACTION');
+    const getDef=(id)=>catalog.functions.find(x=>x.id===id);
+
+    const tslot=document.getElementById('triggerSlot'); tslot.innerHTML='';
+    tslot.appendChild(renderStepCard('Trigger',{
+      functions:triggers,
+      value:draft.trigger?.id||1,
+      params:draft.trigger?.params||{},
+      getDef,
+      onChangeFn:(id)=>{ draft.trigger={id,params:{}}; renderBuilder(); },
+      onChangeParams:(p)=>{ draft.trigger.params=p; refreshButtons(); },
+    }));
+
+    const cslot=document.getElementById('conditionsSlot'); cslot.innerHTML='';
+    (draft.conditions||[]).forEach((c,idx)=>{
+      cslot.appendChild(renderStepCard('Condition',{
+        functions:conds,
+        value:c.id,
+        params:c.params||{},
+        getDef,
+        onChangeFn:(id)=>{ draft.conditions[idx]={id,params:{}}; renderBuilder(); },
+        onChangeParams:(p)=>{ draft.conditions[idx].params=p; refreshButtons(); },
+        onRemove:()=>{ draft.conditions.splice(idx,1); renderBuilder(); }
+      }));
     });
+
+    const aslot=document.getElementById('actionsSlot'); aslot.innerHTML='';
+    (draft.actions||[]).forEach((a,idx)=>{
+      aslot.appendChild(renderStepCard('Action',{
+        functions:acts,
+        value:a.id,
+        params:a.params||{},
+        getDef,
+        onChangeFn:(id)=>{ draft.actions[idx]={id,params:{}}; renderBuilder(); },
+        onChangeParams:(p)=>{ draft.actions[idx].params=p; refreshButtons(); },
+        onRemove:()=>{ draft.actions.splice(idx,1); renderBuilder(); }
+      }));
+    });
+
+    refreshButtons();
+  }
+
+  function fromStoredToDraft(item){
+    const f=item.f||[], p=item.p||[];
+    const trigIdx=f.findIndex(id=>id>=1 && id<=6);
+    const trigger= trigIdx>=0 ? {id:f[trigIdx], params:p[trigIdx]||{}} : {id:1, params:{}};
+    const conditions=[], actions=[];
+    f.forEach((id,idx)=>{
+      if(idx===trigIdx) return;
+      if(id>=7 && id<=12) conditions.push({id, params:p[idx]||{}});
+      if(id>=13 && id<=18) actions.push({id, params:p[idx]||{}});
+    });
+    return { name:item.name||'', enabled:item.enabled!==false, trigger, conditions, actions };
+  }
+
+  async function loadCatalog(){
+    const res=await fetch('/api/automation/catalog',{credentials:'same-origin'});
+    catalog=await res.json();
+  }
+  async function loadAutomations(){
+    const res=await fetch(`/api/guild/${guildId}/automations`,{credentials:'same-origin'});
+    const data=await res.json();
+    autos=data.items||[];
+    renderAutomationList();
+  }
+
+  function selectAutomation(id){
+    selected = autos.find(a=>String(a._id)===String(id));
+    draft = selected ? fromStoredToDraft(selected) : null;
+    renderAutomationList();
+    renderBuilder();
+  }
+
+  function newAutomationDraft(){
+    selected=null;
+    draft={
+      name:'New automation',
+      enabled:true,
+      trigger:{id:1,params:{}},
+      conditions:[],
+      actions:[{id:13,params:{c:'',t:''}}],
+    };
+    renderAutomationList();
+    renderBuilder();
+  }
+
+  async function saveAutomation(){
+    const v=validateDraft(draft);
+    if(!v.ok) return;
+
+    const {f,p}=encodePlan(draft);
+    const csrf=await getCsrf();
+    const payload={ name:draft.name.trim(), enabled:!!draft.enabled, f, p };
+
+    if(!selected){
+      const res=await fetch(`/api/guild/${guildId}/automations`,{
+        method:'POST',
+        credentials:'same-origin',
+        headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},
+        body:JSON.stringify(payload),
+      });
+      const out=await res.json().catch(()=>({}));
+      if(!res.ok) return alert(out.error||'Failed to create automation');
+      await loadAutomations();
+      if(autos[0]) selectAutomation(autos[0]._id);
+    } else {
+      const res=await fetch(`/api/guild/${guildId}/automations/${selected._id}`,{
+        method:'PUT',
+        credentials:'same-origin',
+        headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},
+        body:JSON.stringify(payload),
+      });
+      const out=await res.json().catch(()=>({}));
+      if(!res.ok) return alert(out.error||'Failed to update automation');
+      await loadAutomations();
+      selectAutomation(selected._id);
+    }
+  }
+
+  async function deleteAutomation(){
+    if(!selected) return;
+    if(!confirm('Delete this automation?')) return;
+
+    const csrf=await getCsrf();
+    const res=await fetch(`/api/guild/${guildId}/automations/${selected._id}`,{
+      method:'DELETE',
+      credentials:'same-origin',
+      headers:{'X-CSRF-Token':csrf},
+    });
+    const out=await res.json().catch(()=>({}));
+    if(!res.ok) return alert(out.error||'Failed to delete');
+
+    await loadAutomations();
+    selected=null; draft=null;
+    renderAutomationList();
+    renderBuilder();
+  }
+
+  if(tab==='automations'){
+    (async function(){
+      await loadCatalog();
+      await loadAutomations();
+      renderBuilder();
+
+      document.getElementById('autoNew').addEventListener('click', newAutomationDraft);
+      document.getElementById('autoSave').addEventListener('click', saveAutomation);
+      document.getElementById('autoDelete').addEventListener('click', deleteAutomation);
+
+      document.getElementById('addCondition').addEventListener('click', ()=>{
+        if(!draft) return;
+        if(countSteps(draft)>=MAX_FUNCS) return alert('Max steps reached');
+        draft.conditions.push({id:7,params:{c:''}});
+        renderBuilder();
+      });
+
+      document.getElementById('addAction').addEventListener('click', ()=>{
+        if(!draft) return;
+        if(countSteps(draft)>=MAX_FUNCS) return alert('Max steps reached');
+        draft.actions.push({id:13,params:{c:'',t:''}});
+        renderBuilder();
+      });
+    })();
   }
 </script>
