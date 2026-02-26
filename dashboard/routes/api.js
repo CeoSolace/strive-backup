@@ -6,6 +6,7 @@ const CheckAuth = require("../auth/CheckAuth");
 const DashboardUser = require("../models/DashboardUser");
 const UserConsent = require("../models/UserConsent");
 const ConsentAuditEvent = require("../models/ConsentAuditEvent");
+
 // Additional models for guild settings, automations, audit logs, user preferences and news
 const GuildSettings = require("../models/GuildSettings");
 const Automation = require("../models/Automation");
@@ -25,7 +26,13 @@ async function ensureGuildAdmin(req, guildId) {
 async function createAudit(req, guildId, action, details = {}) {
   try {
     const discordId = req.session.user.id;
-    await AuditLog.create({ discordId, guildId: guildId || null, action, details, actor: discordId });
+    await AuditLog.create({
+      discordId,
+      guildId: guildId || null,
+      action,
+      details,
+      actor: discordId,
+    });
   } catch (e) {
     console.error("Audit log creation failed", e);
   }
@@ -34,6 +41,7 @@ async function createAudit(req, guildId, action, details = {}) {
 const router = express.Router();
 
 const CONSENT_VERSION = "2026-01-05";
+const CONSENT_COOKIE = "bright_consent";
 
 function hashIp(ip) {
   if (!ip) return undefined;
@@ -51,6 +59,38 @@ function defaultConsent() {
     training: false,
     marketing: false,
   };
+}
+
+function parseConsentCookie(req) {
+  try {
+    if (!req.cookies || !req.cookies[CONSENT_COOKIE]) return null;
+    const raw = req.cookies[CONSENT_COOKIE];
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.v !== CONSENT_VERSION) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function setConsentCookie(res, nextConsent) {
+  // Compact cookie payload (keep small)
+  const cookiePayload = {
+    v: CONSENT_VERSION,
+    a: !!nextConsent.analytics,
+    d: !!nextConsent.diagnostics,
+    t: !!nextConsent.training,
+    m: !!nextConsent.marketing,
+    ts: Date.now(),
+  };
+
+  // If you do NOT need JS access, set httpOnly: true for better security.
+  res.cookie(CONSENT_COOKIE, JSON.stringify(cookiePayload), {
+    httpOnly: false,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 365 * 24 * 60 * 60 * 1000, // 1 year
+  });
 }
 
 // CSRF helper for client fetches
@@ -84,12 +124,31 @@ router.get("/me", CheckAuth, async (req, res) => {
 
 /**
  * GET /api/consent
+ * - Primary source of truth: Mongo UserConsent
+ * - If no Mongo record exists, fall back to consent cookie (if present and version matches)
  */
 router.get("/consent", CheckAuth, async (req, res) => {
   const discordId = req.session.user.id;
   const record = await UserConsent.findOne({ discordId }).lean();
 
   if (!record) {
+    const cookie = parseConsentCookie(req);
+    if (cookie) {
+      return res.json({
+        hasChoice: true,
+        consent: {
+          version: CONSENT_VERSION,
+          essential: true,
+          analytics: !!cookie.a,
+          diagnostics: !!cookie.d,
+          training: !!cookie.t,
+          marketing: !!cookie.m,
+        },
+        updatedAt: cookie.ts ? new Date(cookie.ts) : null,
+        source: "cookie",
+      });
+    }
+
     return res.json({
       hasChoice: false,
       consent: defaultConsent(),
@@ -114,6 +173,7 @@ router.get("/consent", CheckAuth, async (req, res) => {
 
 /**
  * PUT /api/consent
+ * Saves consent in Mongo AND writes a compact cookie reflecting the choice.
  */
 router.put("/consent", CheckAuth, async (req, res) => {
   const discordId = req.session.user.id;
@@ -151,6 +211,7 @@ router.put("/consent", CheckAuth, async (req, res) => {
     source: incoming.source || "settings",
   };
 
+  // Safety: on first-time record, do not allow silent training opt-in unless explicit true
   if (!current) {
     if (incoming.training !== true) nextConsent.training = false;
   }
@@ -168,6 +229,9 @@ router.put("/consent", CheckAuth, async (req, res) => {
     { $set: nextConsent, $setOnInsert: { discordId } },
     { upsert: true }
   );
+
+  // Write/update consent cookie to match saved selection
+  setConsentCookie(res, nextConsent);
 
   if (!current || changes.length > 0) {
     await ConsentAuditEvent.create({
@@ -203,18 +267,14 @@ router.get("/consent/history", CheckAuth, async (req, res) => {
 
 /**
  * POST /api/account/export
- * Export the user's dashboard-related data (dashboard user record, consent preferences, consent history).
  */
 router.post("/account/export", CheckAuth, async (req, res) => {
   const discordId = req.session.user.id;
   try {
-    // Fetch dashboard user record (excluding internal fields)
     const userRecord = await DashboardUser.findOne({ discordId }).lean();
-    // Fetch current consent
     const consent = await UserConsent.findOne({ discordId }).lean();
-    // Fetch consent audit events
     const history = await ConsentAuditEvent.find({ discordId }).sort({ changedAt: 1 }).lean();
-    // Build export payload
+
     return res.json({
       discord: {
         id: req.session.user.id,
@@ -260,28 +320,32 @@ router.post("/account/export", CheckAuth, async (req, res) => {
 
 /**
  * POST /api/account/delete
- * Delete the user's dashboard-only data: consent, audit history, and dashboard user record.
+ * Clears the consent cookie too.
  */
 router.post("/account/delete", CheckAuth, async (req, res) => {
   const discordId = req.session.user.id;
-  // Validate payload: confirm must equal 'DELETE'
+
   const schema = z
     .object({
       confirm: z.literal("DELETE"),
     })
     .strict();
+
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
   }
+
   try {
-    // Remove consent and audit events and dashboard user record
     await Promise.all([
       UserConsent.deleteOne({ discordId }),
       ConsentAuditEvent.deleteMany({ discordId }),
       DashboardUser.deleteOne({ discordId }),
     ]);
-    // Destroy session to sign the user out
+
+    // Clear consent cookie
+    res.clearCookie(CONSENT_COOKIE);
+
     req.session.destroy(() => {});
     return res.json({ ok: true });
   } catch (e) {
@@ -292,7 +356,6 @@ router.post("/account/delete", CheckAuth, async (req, res) => {
 
 /**
  * POST /api/account/signout-all
- * Invalidate all sessions by bumping the sessionVersion on the dashboard user record.
  */
 router.post("/account/signout-all", CheckAuth, async (req, res) => {
   const discordId = req.session.user.id;
@@ -302,7 +365,6 @@ router.post("/account/signout-all", CheckAuth, async (req, res) => {
       user.sessionVersion = (user.sessionVersion || 1) + 1;
       await user.save();
     }
-    // Destroy current session so user must log in again
     req.session.destroy(() => {});
     return res.json({ ok: true });
   } catch (e) {
@@ -313,43 +375,32 @@ router.post("/account/signout-all", CheckAuth, async (req, res) => {
 
 // -------------------------- Guild Settings Endpoints --------------------------
 
-/**
- * GET /api/guild/:guildId/settings
- * Returns guild settings stored via the dashboard.
- */
 router.get("/guild/:guildId/settings", CheckAuth, async (req, res) => {
   const guildId = req.params.guildId;
-  // Ensure user has access to this guild
-  if (!(await ensureGuildAdmin(req, guildId))) {
-    return res.status(403).json({ error: "Forbidden" });
-  }
+  if (!(await ensureGuildAdmin(req, guildId))) return res.status(403).json({ error: "Forbidden" });
+
   try {
     let record = await GuildSettings.findOne({ guildId });
-    if (!record) {
-      record = await GuildSettings.create({ guildId });
-    }
-    return res.json({ settings: record.settings || {}, modules: record.modules || {}, commands: record.commands || {} });
+    if (!record) record = await GuildSettings.create({ guildId });
+    return res.json({
+      settings: record.settings || {},
+      modules: record.modules || {},
+      commands: record.commands || {},
+    });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: "Failed to fetch guild settings" });
   }
 });
 
-/**
- * PUT /api/guild/:guildId/settings
- * Update generic guild settings (not modules/commands).
- * Body: { settings: object }
- */
 router.put("/guild/:guildId/settings", CheckAuth, async (req, res) => {
   const guildId = req.params.guildId;
-  if (!(await ensureGuildAdmin(req, guildId))) {
-    return res.status(403).json({ error: "Forbidden" });
-  }
+  if (!(await ensureGuildAdmin(req, guildId))) return res.status(403).json({ error: "Forbidden" });
+
   const schema = z.object({ settings: z.record(z.any()) }).strict();
   const parsed = schema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
-  }
+  if (!parsed.success) return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+
   try {
     const { settings } = parsed.data;
     const record = await GuildSettings.findOneAndUpdate(
@@ -365,34 +416,17 @@ router.put("/guild/:guildId/settings", CheckAuth, async (req, res) => {
   }
 });
 
-/**
- * GET /api/guild/:guildId/modules
- * Returns available modules and enabled status.
- */
 router.get("/guild/:guildId/modules", CheckAuth, async (req, res) => {
   const guildId = req.params.guildId;
-  if (!(await ensureGuildAdmin(req, guildId))) {
-    return res.status(403).json({ error: "Forbidden" });
-  }
+  if (!(await ensureGuildAdmin(req, guildId))) return res.status(403).json({ error: "Forbidden" });
+
   try {
-    // Static list of modules for demonstration; extend as needed
-    const availableModules = [
-      "admin",
-      "music",
-      "fun",
-      "moderation",
-      "utility",
-      "economy",
-      "social",
-    ];
+    const availableModules = ["admin", "music", "fun", "moderation", "utility", "economy", "social"];
     let record = await GuildSettings.findOne({ guildId });
-    if (!record) {
-      record = await GuildSettings.create({ guildId });
-    }
+    if (!record) record = await GuildSettings.create({ guildId });
+
     const enabled = {};
-    availableModules.forEach((m) => {
-      enabled[m] = record.modules?.get(m) ?? false;
-    });
+    availableModules.forEach((m) => (enabled[m] = record.modules?.get(m) ?? false));
     return res.json({ availableModules, enabled });
   } catch (e) {
     console.error(e);
@@ -400,25 +434,14 @@ router.get("/guild/:guildId/modules", CheckAuth, async (req, res) => {
   }
 });
 
-/**
- * PUT /api/guild/:guildId/modules
- * Toggle a module. Body: { module: string, enabled: boolean }
- */
 router.put("/guild/:guildId/modules", CheckAuth, async (req, res) => {
   const guildId = req.params.guildId;
-  if (!(await ensureGuildAdmin(req, guildId))) {
-    return res.status(403).json({ error: "Forbidden" });
-  }
-  const schema = z
-    .object({
-      module: z.string(),
-      enabled: z.boolean(),
-    })
-    .strict();
+  if (!(await ensureGuildAdmin(req, guildId))) return res.status(403).json({ error: "Forbidden" });
+
+  const schema = z.object({ module: z.string(), enabled: z.boolean() }).strict();
   const parsed = schema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
-  }
+  if (!parsed.success) return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+
   try {
     const { module, enabled } = parsed.data;
     const record = await GuildSettings.findOneAndUpdate(
@@ -434,32 +457,25 @@ router.put("/guild/:guildId/modules", CheckAuth, async (req, res) => {
   }
 });
 
-/**
- * GET /api/guild/:guildId/commands
- * Returns available commands and enabled status per command.
- */
 router.get("/guild/:guildId/commands", CheckAuth, async (req, res) => {
   const guildId = req.params.guildId;
-  if (!(await ensureGuildAdmin(req, guildId))) {
-    return res.status(403).json({ error: "Forbidden" });
-  }
+  if (!(await ensureGuildAdmin(req, guildId))) return res.status(403).json({ error: "Forbidden" });
+
   try {
-    // Derive available commands from the client's command registry
     const availableCommands = [];
     if (req.client?.commands && Array.isArray(req.client.commands)) {
-      for (const cmd of req.client.commands) {
-        if (cmd?.name) availableCommands.push(cmd.name);
-      }
+      for (const cmd of req.client.commands) if (cmd?.name) availableCommands.push(cmd.name);
     }
+
     let record = await GuildSettings.findOne({ guildId });
-    if (!record) {
-      record = await GuildSettings.create({ guildId });
-    }
+    if (!record) record = await GuildSettings.create({ guildId });
+
     const enabled = {};
     availableCommands.forEach((c) => {
       const val = record.commands?.get(c);
       enabled[c] = val === undefined ? true : !!val;
     });
+
     return res.json({ availableCommands, enabled });
   } catch (e) {
     console.error(e);
@@ -467,25 +483,14 @@ router.get("/guild/:guildId/commands", CheckAuth, async (req, res) => {
   }
 });
 
-/**
- * PUT /api/guild/:guildId/commands
- * Toggle a command. Body: { command: string, enabled: boolean }
- */
 router.put("/guild/:guildId/commands", CheckAuth, async (req, res) => {
   const guildId = req.params.guildId;
-  if (!(await ensureGuildAdmin(req, guildId))) {
-    return res.status(403).json({ error: "Forbidden" });
-  }
-  const schema = z
-    .object({
-      command: z.string(),
-      enabled: z.boolean(),
-    })
-    .strict();
+  if (!(await ensureGuildAdmin(req, guildId))) return res.status(403).json({ error: "Forbidden" });
+
+  const schema = z.object({ command: z.string(), enabled: z.boolean() }).strict();
   const parsed = schema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
-  }
+  if (!parsed.success) return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+
   try {
     const { command, enabled } = parsed.data;
     const record = await GuildSettings.findOneAndUpdate(
@@ -501,15 +506,10 @@ router.put("/guild/:guildId/commands", CheckAuth, async (req, res) => {
   }
 });
 
-/**
- * GET /api/guild/:guildId/automations
- * Returns list of automations for the guild.
- */
 router.get("/guild/:guildId/automations", CheckAuth, async (req, res) => {
   const guildId = req.params.guildId;
-  if (!(await ensureGuildAdmin(req, guildId))) {
-    return res.status(403).json({ error: "Forbidden" });
-  }
+  if (!(await ensureGuildAdmin(req, guildId))) return res.status(403).json({ error: "Forbidden" });
+
   try {
     const items = await Automation.find({ guildId }).lean();
     return res.json({ items });
@@ -519,16 +519,10 @@ router.get("/guild/:guildId/automations", CheckAuth, async (req, res) => {
   }
 });
 
-/**
- * POST /api/guild/:guildId/automations
- * Create a new automation for the guild.
- * Body: { name: string, schedule: string, action: string, params?: object }
- */
 router.post("/guild/:guildId/automations", CheckAuth, async (req, res) => {
   const guildId = req.params.guildId;
-  if (!(await ensureGuildAdmin(req, guildId))) {
-    return res.status(403).json({ error: "Forbidden" });
-  }
+  if (!(await ensureGuildAdmin(req, guildId))) return res.status(403).json({ error: "Forbidden" });
+
   const schema = z
     .object({
       name: z.string().min(1),
@@ -537,10 +531,10 @@ router.post("/guild/:guildId/automations", CheckAuth, async (req, res) => {
       params: z.record(z.any()).optional(),
     })
     .strict();
+
   const parsed = schema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
-  }
+  if (!parsed.success) return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+
   try {
     const data = parsed.data;
     const automation = await Automation.create({ guildId, ...data });
@@ -552,16 +546,11 @@ router.post("/guild/:guildId/automations", CheckAuth, async (req, res) => {
   }
 });
 
-/**
- * DELETE /api/guild/:guildId/automations/:automationId
- * Remove an automation task.
- */
 router.delete("/guild/:guildId/automations/:automationId", CheckAuth, async (req, res) => {
   const guildId = req.params.guildId;
   const automationId = req.params.automationId;
-  if (!(await ensureGuildAdmin(req, guildId))) {
-    return res.status(403).json({ error: "Forbidden" });
-  }
+  if (!(await ensureGuildAdmin(req, guildId))) return res.status(403).json({ error: "Forbidden" });
+
   try {
     await Automation.deleteOne({ _id: automationId, guildId });
     await createAudit(req, guildId, "delete_automation", { id: automationId });
@@ -574,10 +563,6 @@ router.delete("/guild/:guildId/automations/:automationId", CheckAuth, async (req
 
 // -------------------------- Logs & Analytics Endpoints --------------------------
 
-/**
- * GET /api/logs
- * Returns audit logs for the current user (optionally filtered by guild). Query params: page, limit, guildId.
- */
 router.get("/logs", CheckAuth, async (req, res) => {
   const discordId = req.session.user.id;
   const page = Math.max(1, Number(req.query.page || 1));
@@ -586,6 +571,7 @@ router.get("/logs", CheckAuth, async (req, res) => {
   const skip = (page - 1) * limit;
   const filter = { discordId };
   if (guildId) filter.guildId = guildId;
+
   try {
     const [items, total] = await Promise.all([
       AuditLog.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
@@ -598,10 +584,6 @@ router.get("/logs", CheckAuth, async (req, res) => {
   }
 });
 
-/**
- * GET /api/analytics
- * Returns basic analytics for the current user across all accessible guilds.
- */
 router.get("/analytics", CheckAuth, async (req, res) => {
   try {
     const discordId = req.session.user.id;
@@ -611,6 +593,7 @@ router.get("/analytics", CheckAuth, async (req, res) => {
     const automationsCount = await Automation.countDocuments({ guildId: { $in: guilds.map((g) => g.id) } });
     const modulesChanged = await AuditLog.countDocuments({ discordId, action: "toggle_module" });
     const commandsChanged = await AuditLog.countDocuments({ discordId, action: "toggle_command" });
+
     return res.json({ guildCount, settingsChanges, automationsCount, modulesChanged, commandsChanged });
   } catch (e) {
     console.error(e);
@@ -620,9 +603,6 @@ router.get("/analytics", CheckAuth, async (req, res) => {
 
 // -------------------------- User Preferences & Billing Endpoints --------------------------
 
-/**
- * GET /api/user/preferences
- */
 router.get("/user/preferences", CheckAuth, async (req, res) => {
   const discordId = req.session.user.id;
   try {
@@ -635,22 +615,19 @@ router.get("/user/preferences", CheckAuth, async (req, res) => {
   }
 });
 
-/**
- * PUT /api/user/preferences
- * Update user preferences. Body: { defaultGuild?: string, emailExport?: boolean }
- */
 router.put("/user/preferences", CheckAuth, async (req, res) => {
   const discordId = req.session.user.id;
+
   const schema = z
     .object({
       defaultGuild: z.string().optional().nullable(),
       emailExport: z.boolean().optional(),
     })
     .strict();
+
   const parsed = schema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
-  }
+  if (!parsed.success) return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+
   try {
     const update = parsed.data;
     const prefs = await UserPreferences.findOneAndUpdate(
@@ -666,10 +643,6 @@ router.put("/user/preferences", CheckAuth, async (req, res) => {
   }
 });
 
-/**
- * GET /api/billing
- * Returns the billing plan for the current user.
- */
 router.get("/billing", CheckAuth, async (req, res) => {
   const discordId = req.session.user.id;
   try {
@@ -684,10 +657,6 @@ router.get("/billing", CheckAuth, async (req, res) => {
 
 // -------------------------- News Endpoints --------------------------
 
-/**
- * GET /api/news
- * Returns all news posts, sorted by creation date descending.
- */
 router.get("/news", CheckAuth, async (req, res) => {
   try {
     const posts = await NewsPost.find().sort({ createdAt: -1 }).lean();
@@ -698,30 +667,20 @@ router.get("/news", CheckAuth, async (req, res) => {
   }
 });
 
-// Check if user is admin; admin IDs set in env variable DASHBOARD_ADMIN_IDS as comma-separated list
 function isAdmin(discordId) {
   const admins = process.env.DASHBOARD_ADMIN_IDS || "";
-  const list = admins.split(/[,\s]+/).filter(Boolean);
+  const list = admins.split(/[,\\s]+/).filter(Boolean);
   return list.includes(discordId);
 }
 
-/**
- * POST /api/news
- * Create a new news post. Requires admin.
- */
 router.post("/news", CheckAuth, async (req, res) => {
   const discordId = req.session.user.id;
   if (!isAdmin(discordId)) return res.status(403).json({ error: "Forbidden" });
-  const schema = z
-    .object({
-      title: z.string().min(1),
-      content: z.string().min(1),
-    })
-    .strict();
+
+  const schema = z.object({ title: z.string().min(1), content: z.string().min(1) }).strict();
   const parsed = schema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
-  }
+  if (!parsed.success) return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+
   try {
     const post = await NewsPost.create({ ...parsed.data, authorId: discordId });
     await createAudit(req, null, "create_news", { id: post._id.toString() });
@@ -732,26 +691,20 @@ router.post("/news", CheckAuth, async (req, res) => {
   }
 });
 
-/**
- * PUT /api/news/:postId
- * Update a news post. Requires admin.
- */
 router.put("/news/:postId", CheckAuth, async (req, res) => {
   const discordId = req.session.user.id;
   if (!isAdmin(discordId)) return res.status(403).json({ error: "Forbidden" });
+
   const postId = req.params.postId;
-  const schema = z
-    .object({
-      title: z.string().optional(),
-      content: z.string().optional(),
-    })
-    .strict();
+  const schema = z.object({ title: z.string().optional(), content: z.string().optional() }).strict();
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+
   try {
     const update = parsed.data;
     const post = await NewsPost.findOneAndUpdate({ _id: postId }, { $set: update }, { new: true });
     if (!post) return res.status(404).json({ error: "Not found" });
+
     await createAudit(req, null, "update_news", { id: postId, ...update });
     return res.json({ ok: true, post });
   } catch (e) {
@@ -760,13 +713,10 @@ router.put("/news/:postId", CheckAuth, async (req, res) => {
   }
 });
 
-/**
- * DELETE /api/news/:postId
- * Delete a news post. Requires admin.
- */
 router.delete("/news/:postId", CheckAuth, async (req, res) => {
   const discordId = req.session.user.id;
   if (!isAdmin(discordId)) return res.status(403).json({ error: "Forbidden" });
+
   const postId = req.params.postId;
   try {
     await NewsPost.deleteOne({ _id: postId });
