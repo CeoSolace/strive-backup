@@ -31,7 +31,6 @@ function defaultConsent() {
 
 // CSRF helper for client fetches
 router.get("/csrf", CheckAuth, (req, res) => {
-  // csurf middleware in app.js attaches req.csrfToken
   return res.json({ csrfToken: req.csrfToken ? req.csrfToken() : null });
 });
 
@@ -113,8 +112,6 @@ router.put("/consent", CheckAuth, async (req, res) => {
 
   const incoming = parsed.data;
 
-  // Never auto-enable training: only change it if explicitly provided.
-  // Essential is always true.
   const current = await UserConsent.findOne({ discordId }).lean();
   const base = current ? { ...current } : { ...defaultConsent(), discordId };
 
@@ -131,11 +128,9 @@ router.put("/consent", CheckAuth, async (req, res) => {
   };
 
   if (!current) {
-    // Ensure training defaults to false on first write unless explicitly true
     if (incoming.training !== true) nextConsent.training = false;
   }
 
-  // Compute changes
   const changes = [];
   const keys = ["analytics", "diagnostics", "training", "marketing"];
   for (const key of keys) {
@@ -146,14 +141,10 @@ router.put("/consent", CheckAuth, async (req, res) => {
 
   await UserConsent.updateOne(
     { discordId },
-    {
-      $set: nextConsent,
-      $setOnInsert: { discordId },
-    },
+    { $set: nextConsent, $setOnInsert: { discordId } },
     { upsert: true }
   );
 
-  // Only write audit event if something actually changed OR first choice
   if (!current || changes.length > 0) {
     await ConsentAuditEvent.create({
       discordId,
@@ -162,6 +153,7 @@ router.put("/consent", CheckAuth, async (req, res) => {
       version: CONSENT_VERSION,
       actor: discordId,
       userAgent: req.get("user-agent") || undefined,
+      ipHash: hashIp(req.ip),
     });
   }
 
@@ -182,84 +174,7 @@ router.get("/consent/history", CheckAuth, async (req, res) => {
     ConsentAuditEvent.countDocuments({ discordId }),
   ]);
 
-  return res.json({
-    page,
-    limit,
-    total,
-    items,
-  });
-});
-
-/**
- * POST /api/account/export
- */
-router.post("/account/export", CheckAuth, async (req, res) => {
-  const discordId = req.session.user.id;
-
-  const [user, consent, history] = await Promise.all([
-    DashboardUser.findOne({ discordId }).lean(),
-    UserConsent.findOne({ discordId }).lean(),
-    ConsentAuditEvent.find({ discordId }).sort({ changedAt: -1 }).limit(500).lean(),
-  ]);
-
-  // TODO: include any guild/module settings if you store them elsewhere
-  return res.json({
-    exportedAt: new Date().toISOString(),
-    discordProfile: {
-      ...req.session.user,
-      guilds: Array.isArray(req.session.user.guilds) ? req.session.user.guilds : [],
-    },
-    dashboardUser: user,
-    consent: consent || null,
-    consentHistory: history,
-    other: {
-      note: "Server/module settings export not yet wired in (placeholder).",
-    },
-  });
-});
-
-/**
- * POST /api/account/delete
- * Requires typed confirmation in body: { confirm: "DELETE" }
- */
-router.post("/account/delete", CheckAuth, async (req, res) => {
-  const discordId = req.session.user.id;
-
-  const schema = z.object({ confirm: z.literal("DELETE") }).strict();
-  const parsed = schema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "Confirmation required" });
-
-  await Promise.all([
-    UserConsent.deleteOne({ discordId }),
-    ConsentAuditEvent.deleteMany({ discordId }),
-    DashboardUser.deleteOne({ discordId }),
-  ]);
-
-  // Invalidate this session and all others for this user (cleanest in this stack): bump sessionVersion
-  // If user record is deleted, also wipe sessions that match this discordId if desired.
-  // For safety, attempt session store wipe by bumping version before delete is not possible here.
-  // Instead: destroy current session; other sessions will fail CheckAuth due to missing user record.
-  req.session.destroy(() => {
-    return res.json({ ok: true });
-  });
-});
-
-/**
- * POST /api/account/signout-all
- * Bumps sessionVersion so all sessions become invalid.
- */
-router.post("/account/signout-all", CheckAuth, async (req, res) => {
-  const discordId = req.session.user.id;
-
-  const user = await DashboardUser.findOne({ discordId });
-  if (!user) return res.status(404).json({ error: "User not found" });
-
-  user.sessionVersion += 1;
-  await user.save();
-
-  req.session.destroy(() => {
-    return res.json({ ok: true });
-  });
+  return res.json({ page, limit, total, items });
 });
 
 module.exports = router;
