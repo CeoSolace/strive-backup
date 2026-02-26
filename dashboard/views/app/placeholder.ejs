@@ -1,0 +1,27 @@
+<% layout('layouts/app') -%>
+
+<div class="flex flex-col gap-6">
+  <div class="flex items-start justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-semibold tracking-tight"><%= placeholder?.title || pageTitle %></h1>
+      <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300"><%= placeholder?.description || 'Coming soon.' %></p>
+    </div>
+    <span class="pill">Placeholder</span>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Not wired yet</div>
+    <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
+      This section is part of the new Information Architecture and is ready for integration with your existing guild/module systems.
+    </p>
+
+    <div class="mt-4 rounded-2xl border border-dashed border-zinc-300 p-6 text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
+      <div class="font-semibold">Suggested next steps</div>
+      <ul class="mt-2 list-disc space-y-1 pl-5">
+        <li>Map existing guild settings models into a new API.</li>
+        <li>Replace the placeholder panel with real tables and editors.</li>
+        <li>Add empty/loading/error states per page.</li>
+      </ul>
+    </div>
+  </div>
+</div>

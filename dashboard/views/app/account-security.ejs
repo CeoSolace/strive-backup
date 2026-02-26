@@ -1,0 +1,27 @@
+<% layout('layouts/app') -%>
+
+<div class="flex flex-col gap-6">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight">Security</h1>
+    <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">Sessions and account security controls.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Active session</div>
+    <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">You’re signed in on this device.</p>
+
+    <div class="mt-4 flex flex-wrap gap-2">
+      <a class="btn btn-secondary" href="/logout">Sign out</a>
+      <button class="btn btn-destructive" data-action="signout-all">Sign out all sessions</button>
+    </div>
+
+    <div class="mt-6 rounded-2xl border border-zinc-200 p-4 text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
+      <div class="font-semibold">How it works</div>
+      <p class="mt-1">
+        Bright uses a per-user <span class="font-mono">sessionVersion</span> to invalidate old sessions securely. When you sign out everywhere, the version increments and all existing sessions are rejected.
+      </p>
+    </div>
+
+    <div class="mt-4 text-xs text-zinc-500 dark:text-zinc-400">Bright — built by TheCeoTyro</div>
+  </div>
+</div>

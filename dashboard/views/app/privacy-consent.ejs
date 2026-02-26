@@ -1,0 +1,147 @@
+<% layout('layouts/app') -%>
+
+<div class="flex flex-col gap-6">
+  <div class="flex flex-col gap-1">
+    <h1 class="text-2xl font-semibold tracking-tight">Privacy &amp; Consent</h1>
+    <p class="text-sm text-zinc-600 dark:text-zinc-300">
+      Control what optional data Bright can use to improve reliability and product quality.
+    </p>
+  </div>
+
+  <div class="grid gap-6 lg:grid-cols-3">
+    <section class="card lg:col-span-2">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <div class="card-title">Your preferences</div>
+          <div class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+            Last updated: <span data-consent="updatedAt">—</span>
+          </div>
+        </div>
+        <div class="pill" data-consent="summary">—</div>
+      </div>
+
+      <div class="mt-5 space-y-3">
+        <div class="toggle-row">
+          <div class="min-w-0">
+            <div class="font-semibold">Essential Data</div>
+            <div class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+              Required to run the dashboard (auth, sessions, basic settings). Retention: while your account exists.
+            </div>
+          </div>
+          <label class="switch" aria-label="Essential Data">
+            <input type="checkbox" checked disabled />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="toggle-row">
+          <div class="min-w-0">
+            <div class="font-semibold">Usage Analytics</div>
+            <div class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+              What we collect: high-level feature usage and page events. Retention: 90 days.
+            </div>
+          </div>
+          <label class="switch" aria-label="Usage Analytics">
+            <input type="checkbox" data-consent-toggle="analytics" />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="toggle-row">
+          <div class="min-w-0">
+            <div class="font-semibold">Bot Diagnostics</div>
+            <div class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+              What we collect: error traces and operational metrics. Retention: 30 days.
+            </div>
+          </div>
+          <label class="switch" aria-label="Bot Diagnostics">
+            <input type="checkbox" data-consent-toggle="diagnostics" />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="toggle-row">
+          <div class="min-w-0">
+            <div class="font-semibold">Product Improvement / Training Data</div>
+            <div class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+              What we collect: anonymized interaction patterns for improving Bright. Default OFF; opt-in only. Retention: 180 days.
+            </div>
+          </div>
+          <label class="switch" aria-label="Product Improvement / Training Data">
+            <input type="checkbox" data-consent-toggle="training" />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="toggle-row">
+          <div class="min-w-0">
+            <div class="font-semibold">Marketing Updates</div>
+            <div class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+              What we collect: preferences for product announcements. Retention: until you opt out.
+            </div>
+          </div>
+          <label class="switch" aria-label="Marketing Updates">
+            <input type="checkbox" data-consent-toggle="marketing" />
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="mt-6 flex flex-wrap gap-2">
+        <button class="btn btn-primary" data-action="save-consent">Save changes</button>
+        <button class="btn btn-secondary" data-action="download-consent">Download my consent record</button>
+        <button class="btn btn-ghost" data-action="toggle-history">View change history</button>
+      </div>
+
+      <div class="mt-6 hidden" data-panel="history">
+        <div class="flex items-center justify-between">
+          <div class="text-sm font-semibold">Change history</div>
+          <div class="text-xs text-zinc-500 dark:text-zinc-400">Most recent first</div>
+        </div>
+        <div class="mt-3 overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-zinc-50 text-xs text-zinc-500 dark:bg-zinc-900/40 dark:text-zinc-400">
+              <tr>
+                <th class="px-4 py-3">When</th>
+                <th class="px-4 py-3">Changes</th>
+                <th class="px-4 py-3">Version</th>
+              </tr>
+            </thead>
+            <tbody data-consent-history>
+              <tr><td class="px-4 py-4" colspan="3"><div class="skeleton h-4 w-40"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="mt-3 flex items-center justify-between">
+          <button class="btn btn-ghost" data-action="history-prev">Prev</button>
+          <div class="text-xs text-zinc-500 dark:text-zinc-400" data-consent="historyPage">Page 1</div>
+          <button class="btn btn-ghost" data-action="history-next">Next</button>
+        </div>
+      </div>
+
+      <div class="mt-4 text-xs text-zinc-500 dark:text-zinc-400">Bright — built by TheCeoTyro</div>
+    </section>
+
+    <aside class="card">
+      <div class="card-title">Privacy summary</div>
+      <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
+        You control optional categories. Essentials are always on.
+      </p>
+
+      <div class="mt-4 rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800">
+        <div class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Enabled</div>
+        <div class="mt-2 text-2xl font-semibold" data-consent="enabledCount">—</div>
+        <div class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">of 5 categories</div>
+      </div>
+
+      <div class="mt-6">
+        <div class="text-xs font-semibold uppercase tracking-wider text-zinc-400">Need the policy?</div>
+        <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">Read the privacy policy and terms.</p>
+        <div class="mt-3 flex gap-2">
+          <a class="btn btn-ghost" href="/privacy">Privacy</a>
+          <a class="btn btn-ghost" href="/tos">TOS</a>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
