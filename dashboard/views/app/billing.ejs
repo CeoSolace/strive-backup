@@ -1,0 +1,25 @@
+<% layout('layouts/app') -%>
+
+<div class="flex flex-col gap-6">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight">Billing</h1>
+    <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">Your current dashboard billing status.</p>
+  </div>
+  <section class="card">
+    <div class="card-title">Current Plan</div>
+    <div class="mt-4 text-2xl font-semibold" id="plan">—</div>
+    <div class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">All features are currently available on the free plan.</div>
+  </section>
+</div>
+
+<script>
+  (async function() {
+    try {
+      const res = await fetch('/api/billing', { credentials: 'same-origin' });
+      const data = await res.json();
+      document.getElementById('plan').textContent = data.plan ? data.plan.charAt(0).toUpperCase() + data.plan.slice(1) + ' plan' : 'Free plan';
+    } catch (e) {
+      document.getElementById('plan').textContent = 'Unknown';
+    }
+  })();
+</script>
