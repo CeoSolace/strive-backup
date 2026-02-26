@@ -1,161 +1,838 @@
 const express = require("express");
+const crypto = require("crypto");
+const { z } = require("zod");
+
 const CheckAuth = require("../auth/CheckAuth");
+const DashboardUser = require("../models/DashboardUser");
+const UserConsent = require("../models/UserConsent");
+const ConsentAuditEvent = require("../models/ConsentAuditEvent");
+// Additional models for guild settings, automations, audit logs, user preferences and news
+const GuildSettings = require("../models/GuildSettings");
+const Automation = require("../models/Automation");
+const AuditLog = require("../models/AuditLog");
+const UserPreferences = require("../models/UserPreferences");
+const NewsPost = require("../models/NewsPost");
+
+// Helper to ensure a user has Manage Guild permissions for the given guild ID
+async function ensureGuildAdmin(req, guildId) {
+  const guilds = req.userInfos?.guilds || [];
+  const guild = guilds.find((g) => g.id === guildId);
+  if (!guild || !guild.admin) return false;
+  return true;
+}
+
+// Helper to create an audit log entry
+async function createAudit(req, guildId, action, details = {}) {
+  try {
+    const discordId = req.session.user.id;
+    await AuditLog.create({ discordId, guildId: guildId || null, action, details, actor: discordId });
+  } catch (e) {
+    console.error("Audit log creation failed", e);
+  }
+}
 
 const router = express.Router();
 
-// Home: send authenticated users into the app
-router.get("/", async (req, res) => {
-  if (req.session.user) return res.redirect("/app/overview");
-  return res.redirect("/api/login?state=no");
+const CONSENT_VERSION = "2026-01-05";
+const CONSENT_COOKIE = "bright_consent";
+
+function parseConsentCookie(req) {
+  try {
+    const raw = req.cookies?.[CONSENT_COOKIE];
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.v !== CONSENT_VERSION) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function setConsentCookie(res, consent) {
+  const payload = {
+    v: CONSENT_VERSION,
+    a: !!consent.analytics,
+    d: !!consent.diagnostics,
+    t: !!consent.training,
+    m: !!consent.marketing,
+    ts: Date.now(),
+  };
+
+  res.cookie(CONSENT_COOKIE, JSON.stringify(payload), {
+    // Allow the client to read consent and avoid banner flicker.
+    // If you don't need this, set to true.
+    httpOnly: false,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 365 * 24 * 60 * 60 * 1000,
+  });
+}
+
+function hashIp(ip) {
+  if (!ip) return undefined;
+  const salt = process.env.CONSENT_IP_SALT;
+  if (!salt) return undefined;
+  return crypto.createHash("sha256").update(`${salt}:${ip}`).digest("hex");
+}
+
+function defaultConsent() {
+  return {
+    version: CONSENT_VERSION,
+    essential: true,
+    analytics: false,
+    diagnostics: false,
+    training: false,
+    marketing: false,
+  };
+}
+
+// CSRF helper for client fetches
+router.get("/csrf", CheckAuth, (req, res) => {
+  return res.json({ csrfToken: req.csrfToken ? req.csrfToken() : null });
 });
 
-// Selector (legacy; keep it working)
-router.get("/selector", CheckAuth, async (req, res) => {
-  res.redirect("/app/servers");
-});
+/**
+ * GET /api/me
+ */
+router.get("/me", CheckAuth, async (req, res) => {
+  const discord = req.session.user;
+  const guilds = Array.isArray(discord.guilds) ? discord.guilds : [];
 
-// Terms of Service
-router.get("/tos", CheckAuth, async (req, res) => {
-  const content = `
-Welcome to Bright.
-
-By accessing or using the Bright dashboard (the “Service”), you agree to these Terms of Service (“Terms”).
-If you do not agree, do not use the Service.
-
-1) Service Description
-Bright is a Discord bot and dashboard that helps manage and configure bot features for Discord servers (“Guilds”).
-The dashboard allows you to authenticate with Discord, view eligible servers, and store configuration in MongoDB.
-
-2) Eligibility & Account
-You must have a valid Discord account to use the Service.
-You are responsible for maintaining the security of your Discord account and any sessions on this dashboard.
-
-3) Server Access & Permissions
-You may only manage Guilds where you have “Manage Guild” or “Administrator” permissions.
-The Service enforces permission checks to prevent unauthorized access.
-
-4) Acceptable Use
-You agree not to:
-- attempt to bypass authentication/authorization checks
-- probe, scan, or test vulnerabilities without permission
-- use the Service for unlawful, abusive, or harmful activity
-
-5) Data Storage
-Configuration and preferences are stored in MongoDB.
-Consent preferences are stored in MongoDB and may also be stored in a browser cookie for convenience.
-
-6) Third-Party Services
-The Service uses Discord OAuth2 to authenticate and retrieve the list of Guilds you can manage.
-Discord is a third-party service and is governed by Discord’s terms and policies.
-
-7) Availability & Changes
-We may update, modify, or discontinue parts of the Service at any time.
-We do not guarantee uninterrupted availability.
-
-8) Disclaimer
-The Service is provided “as is” and “as available” without warranties of any kind.
-To the maximum extent permitted by law, we disclaim all warranties, express or implied.
-
-9) Limitation of Liability
-To the maximum extent permitted by law, we are not liable for indirect, incidental, special, consequential, or punitive damages,
-or any loss of data, profits, or goodwill.
-
-10) Termination
-We may suspend or terminate access to the Service if you violate these Terms or if required for security reasons.
-You may stop using the Service at any time.
-
-11) Contact
-For support or questions, contact the project maintainers via the repository issue tracker.
-
-`.trim();
-
-  res.render("legal", {
-    user: req.userInfos,
-    pageTitle: "Terms of Service",
-    heading: "Terms of Service",
-    updatedAt: "January 5, 2026",
-    content,
+  return res.json({
+    discord: {
+      id: discord.id,
+      username: discord.username,
+      discriminator: discord.discriminator,
+      avatar: discord.avatar,
+      global_name: discord.global_name,
+      email: discord.email || null,
+    },
+    app: {
+      guildCount: guilds.length,
+      baseURL: req.client.config.DASHBOARD.baseURL,
+      consentVersion: CONSENT_VERSION,
+    },
   });
 });
 
-// Privacy Policy
-router.get("/privacy", CheckAuth, async (req, res) => {
-  const content = `
-This Privacy Policy explains how Bright collects, uses, stores, and protects information when you use the Service.
+/**
+ * GET /api/consent
+ */
+router.get("/consent", CheckAuth, async (req, res) => {
+  const discordId = req.session.user.id;
+  const record = await UserConsent.findOne({ discordId }).lean();
 
-1) What We Collect
-When you log in with Discord, we may process:
-- Discord user ID, username, discriminator, avatar (as provided by Discord)
-- The list of Guilds you are in (as provided by Discord), including permission flags needed for access checks
+  if (!record) {
+    const cookie = parseConsentCookie(req);
+    if (cookie) {
+      return res.json({
+        hasChoice: true,
+        consent: {
+          version: CONSENT_VERSION,
+          essential: true,
+          analytics: !!cookie.a,
+          diagnostics: !!cookie.d,
+          training: !!cookie.t,
+          marketing: !!cookie.m,
+        },
+        updatedAt: cookie.ts ? new Date(cookie.ts) : null,
+        source: "cookie",
+      });
+    }
+    return res.json({
+      hasChoice: false,
+      consent: defaultConsent(),
+      updatedAt: null,
+      source: "default",
+    });
+  }
 
-Dashboard data stored in MongoDB may include:
-- User preferences (e.g., default guild preference, email export toggle)
-- Guild settings you configure (modules/commands toggles, automation definitions)
-- Audit logs of dashboard actions (e.g., settings updates)
-
-Consent data:
-- Your consent choices for analytics/diagnostics/training/marketing
-- Consent history (audit events) including timestamps and what changed
-- Optional hashed IP (only if CONSENT_IP_SALT is configured)
-
-2) Cookies
-We use cookies for:
-- Session management (to keep you logged in)
-- CSRF protection for state-changing requests
-- Optional consent preference cookie (“bright_consent”) that stores only:
-  - consent version and boolean preferences (analytics/diagnostics/training/marketing)
-  - timestamp of last update
-This cookie does not contain your Discord ID or any direct personal identifier.
-
-3) How We Use Data
-We use data to:
-- authenticate you and maintain secure sessions
-- show you eligible Guilds you can manage
-- persist configuration changes you make in the dashboard
-- maintain audit logs to improve security and accountability
-- apply your consent preferences
-
-4) Data Sharing
-We do not sell your data.
-We share data only as required to operate the Service:
-- Discord OAuth to authenticate and fetch Guild lists
-- Hosting/database providers as needed to run the Service
-
-5) Data Retention
-We retain stored configuration and logs until:
-- you delete your dashboard data using the Account deletion feature, or
-- the service operator removes stored data for operational reasons
-
-6) Your Choices & Rights
-You can:
-- update consent choices at any time in Privacy & Consent
-- export dashboard-related data
-- delete your dashboard-related data (this also clears the consent cookie)
-
-7) Security
-We use standard security measures such as:
-- secure session cookies (httpOnly, sameSite; secure in production)
-- CSRF protections for state-changing requests
-- rate limiting on API routes
-- authorization checks to prevent unauthorized access (IDOR)
-
-No system is perfectly secure; if you suspect an issue, report it via the repository issue tracker.
-
-8) Changes
-We may update this Privacy Policy from time to time. The “Updated” date will reflect the latest revision.
-
-9) Contact
-For privacy questions, contact the project maintainers via the repository issue tracker.
-
-`.trim();
-
-  res.render("legal", {
-    user: req.userInfos,
-    pageTitle: "Privacy Policy",
-    heading: "Privacy Policy",
-    updatedAt: "January 5, 2026",
-    content,
+  return res.json({
+    hasChoice: true,
+    consent: {
+      version: record.version,
+      essential: true,
+      analytics: !!record.analytics,
+      diagnostics: !!record.diagnostics,
+      training: !!record.training,
+      marketing: !!record.marketing,
+    },
+    updatedAt: record.updatedAt,
+    source: record.source,
   });
+});
+
+/**
+ * PUT /api/consent
+ */
+router.put("/consent", CheckAuth, async (req, res) => {
+  const discordId = req.session.user.id;
+
+  const schema = z
+    .object({
+      version: z.string().optional(),
+      analytics: z.boolean().optional(),
+      diagnostics: z.boolean().optional(),
+      training: z.boolean().optional(),
+      marketing: z.boolean().optional(),
+      source: z.enum(["banner", "settings", "api"]).optional(),
+    })
+    .strict();
+
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+  }
+
+  const incoming = parsed.data;
+
+  const current = await UserConsent.findOne({ discordId }).lean();
+  const base = current ? { ...current } : { ...defaultConsent(), discordId };
+
+  const nextConsent = {
+    discordId,
+    version: CONSENT_VERSION,
+    essential: true,
+    analytics: incoming.analytics ?? !!base.analytics,
+    diagnostics: incoming.diagnostics ?? !!base.diagnostics,
+    training: incoming.training ?? !!base.training,
+    marketing: incoming.marketing ?? !!base.marketing,
+    updatedAt: new Date(),
+    source: incoming.source || "settings",
+  };
+
+  if (!current) {
+    if (incoming.training !== true) nextConsent.training = false;
+  }
+
+  const changes = [];
+  const keys = ["analytics", "diagnostics", "training", "marketing"];
+  for (const key of keys) {
+    const from = !!(current ? current[key] : defaultConsent()[key]);
+    const to = !!nextConsent[key];
+    if (from !== to) changes.push({ key, from, to });
+  }
+
+  await UserConsent.updateOne(
+    { discordId },
+    { $set: nextConsent, $setOnInsert: { discordId } },
+    { upsert: true }
+  );
+
+  // Persist consent choice in a cookie so the browser remembers immediately
+  setConsentCookie(res, nextConsent);
+
+  if (!current || changes.length > 0) {
+    await ConsentAuditEvent.create({
+      discordId,
+      changedAt: new Date(),
+      changes: current ? changes : [{ key: "consent_created", from: null, to: "created" }],
+      version: CONSENT_VERSION,
+      actor: discordId,
+      userAgent: req.get("user-agent") || undefined,
+      ipHash: hashIp(req.ip),
+    });
+  }
+
+  return res.json({ ok: true, consent: { ...nextConsent, essential: true } });
+});
+
+/**
+ * GET /api/consent/history
+ */
+router.get("/consent/history", CheckAuth, async (req, res) => {
+  const discordId = req.session.user.id;
+  const page = Math.max(1, Number(req.query.page || 1));
+  const limit = Math.min(50, Math.max(5, Number(req.query.limit || 10)));
+  const skip = (page - 1) * limit;
+
+  const [items, total] = await Promise.all([
+    ConsentAuditEvent.find({ discordId }).sort({ changedAt: -1 }).skip(skip).limit(limit).lean(),
+    ConsentAuditEvent.countDocuments({ discordId }),
+  ]);
+
+  return res.json({ page, limit, total, items });
+});
+
+/**
+ * POST /api/account/export
+ * Export the user's dashboard-related data (dashboard user record, consent preferences, consent history).
+ */
+router.post("/account/export", CheckAuth, async (req, res) => {
+  const discordId = req.session.user.id;
+  try {
+    // Fetch dashboard user record (excluding internal fields)
+    const userRecord = await DashboardUser.findOne({ discordId }).lean();
+    // Fetch current consent
+    const consent = await UserConsent.findOne({ discordId }).lean();
+    // Fetch consent audit events
+    const history = await ConsentAuditEvent.find({ discordId }).sort({ changedAt: 1 }).lean();
+    // Build export payload
+    return res.json({
+      discord: {
+        id: req.session.user.id,
+        username: req.session.user.username,
+        discriminator: req.session.user.discriminator,
+        email: req.session.user.email || null,
+      },
+      dashboardUser: userRecord
+        ? {
+            discordId: userRecord.discordId,
+            username: userRecord.username,
+            avatar: userRecord.avatar,
+            discriminator: userRecord.discriminator,
+            createdAt: userRecord.createdAt,
+            updatedAt: userRecord.updatedAt,
+          }
+        : null,
+      consent: consent
+        ? {
+            version: consent.version,
+            essential: true,
+            analytics: !!consent.analytics,
+            diagnostics: !!consent.diagnostics,
+            training: !!consent.training,
+            marketing: !!consent.marketing,
+            updatedAt: consent.updatedAt,
+            source: consent.source,
+          }
+        : null,
+      consentHistory: history.map((ev) => ({
+        changedAt: ev.changedAt,
+        changes: ev.changes,
+        version: ev.version,
+        actor: ev.actor,
+        userAgent: ev.userAgent,
+      })),
+    });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to export data" });
+  }
+});
+
+/**
+ * POST /api/account/delete
+ * Delete the user's dashboard-only data: consent, audit history, and dashboard user record.
+ */
+router.post("/account/delete", CheckAuth, async (req, res) => {
+  const discordId = req.session.user.id;
+  // Validate payload: confirm must equal 'DELETE'
+  const schema = z
+    .object({
+      confirm: z.literal("DELETE"),
+    })
+    .strict();
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+  }
+  try {
+    // Remove consent and audit events and dashboard user record
+    await Promise.all([
+      UserConsent.deleteOne({ discordId }),
+      ConsentAuditEvent.deleteMany({ discordId }),
+      DashboardUser.deleteOne({ discordId }),
+    ]);
+
+    // Clear consent cookie
+    res.clearCookie(CONSENT_COOKIE);
+
+    // Destroy session to sign the user out
+    req.session.destroy(() => {});
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to delete account data" });
+  }
+});
+
+/**
+ * POST /api/account/signout-all
+ * Invalidate all sessions by bumping the sessionVersion on the dashboard user record.
+ */
+router.post("/account/signout-all", CheckAuth, async (req, res) => {
+  const discordId = req.session.user.id;
+  try {
+    const user = await DashboardUser.findOne({ discordId });
+    if (user) {
+      user.sessionVersion = (user.sessionVersion || 1) + 1;
+      await user.save();
+    }
+    // Destroy current session so user must log in again
+    req.session.destroy(() => {});
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to sign out sessions" });
+  }
+});
+
+// -------------------------- Guild Settings Endpoints --------------------------
+
+/**
+ * GET /api/guild/:guildId/settings
+ * Returns guild settings stored via the dashboard.
+ */
+router.get("/guild/:guildId/settings", CheckAuth, async (req, res) => {
+  const guildId = req.params.guildId;
+  // Ensure user has access to this guild
+  if (!(await ensureGuildAdmin(req, guildId))) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  try {
+    let record = await GuildSettings.findOne({ guildId });
+    if (!record) {
+      record = await GuildSettings.create({ guildId });
+    }
+    return res.json({ settings: record.settings || {}, modules: record.modules || {}, commands: record.commands || {} });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to fetch guild settings" });
+  }
+});
+
+/**
+ * PUT /api/guild/:guildId/settings
+ * Update generic guild settings (not modules/commands).
+ * Body: { settings: object }
+ */
+router.put("/guild/:guildId/settings", CheckAuth, async (req, res) => {
+  const guildId = req.params.guildId;
+  if (!(await ensureGuildAdmin(req, guildId))) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  const schema = z.object({ settings: z.record(z.any()) }).strict();
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+  }
+  try {
+    const { settings } = parsed.data;
+    const record = await GuildSettings.findOneAndUpdate(
+      { guildId },
+      { $set: { settings } },
+      { new: true, upsert: true }
+    );
+    await createAudit(req, guildId, "update_settings", { settings });
+    return res.json({ ok: true, settings: record.settings });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to update guild settings" });
+  }
+});
+
+/**
+ * GET /api/guild/:guildId/modules
+ * Returns available modules and enabled status.
+ */
+router.get("/guild/:guildId/modules", CheckAuth, async (req, res) => {
+  const guildId = req.params.guildId;
+  if (!(await ensureGuildAdmin(req, guildId))) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  try {
+    // Static list of modules for demonstration; extend as needed
+    const availableModules = [
+      "admin",
+      "music",
+      "fun",
+      "moderation",
+      "utility",
+      "economy",
+      "social",
+    ];
+    let record = await GuildSettings.findOne({ guildId });
+    if (!record) {
+      record = await GuildSettings.create({ guildId });
+    }
+    const enabled = {};
+    availableModules.forEach((m) => {
+      enabled[m] = record.modules?.get(m) ?? false;
+    });
+    return res.json({ availableModules, enabled });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to fetch modules" });
+  }
+});
+
+/**
+ * PUT /api/guild/:guildId/modules
+ * Toggle a module. Body: { module: string, enabled: boolean }
+ */
+router.put("/guild/:guildId/modules", CheckAuth, async (req, res) => {
+  const guildId = req.params.guildId;
+  if (!(await ensureGuildAdmin(req, guildId))) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  const schema = z
+    .object({
+      module: z.string(),
+      enabled: z.boolean(),
+    })
+    .strict();
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+  }
+  try {
+    const { module, enabled } = parsed.data;
+    const record = await GuildSettings.findOneAndUpdate(
+      { guildId },
+      { $set: { [`modules.${module}`]: enabled } },
+      { new: true, upsert: true }
+    );
+    await createAudit(req, guildId, "toggle_module", { module, enabled });
+    return res.json({ ok: true, enabled: record.modules?.get(module) ?? enabled });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to update module" });
+  }
+});
+
+/**
+ * GET /api/guild/:guildId/commands
+ * Returns available commands and enabled status per command.
+ */
+router.get("/guild/:guildId/commands", CheckAuth, async (req, res) => {
+  const guildId = req.params.guildId;
+  if (!(await ensureGuildAdmin(req, guildId))) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  try {
+    // Derive available commands from the client's command registry
+    const availableCommands = [];
+    if (req.client?.commands && Array.isArray(req.client.commands)) {
+      for (const cmd of req.client.commands) {
+        if (cmd?.name) availableCommands.push(cmd.name);
+      }
+    }
+    let record = await GuildSettings.findOne({ guildId });
+    if (!record) {
+      record = await GuildSettings.create({ guildId });
+    }
+    const enabled = {};
+    availableCommands.forEach((c) => {
+      const val = record.commands?.get(c);
+      enabled[c] = val === undefined ? true : !!val;
+    });
+    return res.json({ availableCommands, enabled });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to fetch commands" });
+  }
+});
+
+/**
+ * PUT /api/guild/:guildId/commands
+ * Toggle a command. Body: { command: string, enabled: boolean }
+ */
+router.put("/guild/:guildId/commands", CheckAuth, async (req, res) => {
+  const guildId = req.params.guildId;
+  if (!(await ensureGuildAdmin(req, guildId))) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  const schema = z
+    .object({
+      command: z.string(),
+      enabled: z.boolean(),
+    })
+    .strict();
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+  }
+  try {
+    const { command, enabled } = parsed.data;
+    const record = await GuildSettings.findOneAndUpdate(
+      { guildId },
+      { $set: { [`commands.${command}`]: enabled } },
+      { new: true, upsert: true }
+    );
+    await createAudit(req, guildId, "toggle_command", { command, enabled });
+    return res.json({ ok: true, enabled: record.commands?.get(command) ?? enabled });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to update command" });
+  }
+});
+
+/**
+ * GET /api/guild/:guildId/automations
+ * Returns list of automations for the guild.
+ */
+router.get("/guild/:guildId/automations", CheckAuth, async (req, res) => {
+  const guildId = req.params.guildId;
+  if (!(await ensureGuildAdmin(req, guildId))) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  try {
+    const items = await Automation.find({ guildId }).lean();
+    return res.json({ items });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to fetch automations" });
+  }
+});
+
+/**
+ * POST /api/guild/:guildId/automations
+ * Create a new automation for the guild.
+ * Body: { name: string, schedule: string, action: string, params?: object }
+ */
+router.post("/guild/:guildId/automations", CheckAuth, async (req, res) => {
+  const guildId = req.params.guildId;
+  if (!(await ensureGuildAdmin(req, guildId))) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  const schema = z
+    .object({
+      name: z.string().min(1),
+      schedule: z.string().min(1),
+      action: z.string().min(1),
+      params: z.record(z.any()).optional(),
+    })
+    .strict();
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+  }
+  try {
+    const data = parsed.data;
+    const automation = await Automation.create({ guildId, ...data });
+    await createAudit(req, guildId, "create_automation", { id: automation._id.toString(), ...data });
+    return res.json({ ok: true, item: automation });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to create automation" });
+  }
+});
+
+/**
+ * DELETE /api/guild/:guildId/automations/:automationId
+ * Remove an automation task.
+ */
+router.delete("/guild/:guildId/automations/:automationId", CheckAuth, async (req, res) => {
+  const guildId = req.params.guildId;
+  const automationId = req.params.automationId;
+  if (!(await ensureGuildAdmin(req, guildId))) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  try {
+    await Automation.deleteOne({ _id: automationId, guildId });
+    await createAudit(req, guildId, "delete_automation", { id: automationId });
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to delete automation" });
+  }
+});
+
+// -------------------------- Logs & Analytics Endpoints --------------------------
+
+/**
+ * GET /api/logs
+ * Returns audit logs for the current user (optionally filtered by guild). Query params: page, limit, guildId.
+ */
+router.get("/logs", CheckAuth, async (req, res) => {
+  const discordId = req.session.user.id;
+  const page = Math.max(1, Number(req.query.page || 1));
+  const limit = Math.min(50, Math.max(5, Number(req.query.limit || 10)));
+  const guildId = req.query.guildId;
+  const skip = (page - 1) * limit;
+  const filter = { discordId };
+  if (guildId) filter.guildId = guildId;
+  try {
+    const [items, total] = await Promise.all([
+      AuditLog.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      AuditLog.countDocuments(filter),
+    ]);
+    return res.json({ page, limit, total, items });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to fetch logs" });
+  }
+});
+
+/**
+ * GET /api/analytics
+ * Returns basic analytics for the current user across all accessible guilds.
+ */
+router.get("/analytics", CheckAuth, async (req, res) => {
+  try {
+    const discordId = req.session.user.id;
+    const guilds = req.userInfos?.guilds || [];
+    const guildCount = guilds.filter((g) => g.admin).length;
+    const settingsChanges = await AuditLog.countDocuments({ discordId, action: "update_settings" });
+    const automationsCount = await Automation.countDocuments({ guildId: { $in: guilds.map((g) => g.id) } });
+    const modulesChanged = await AuditLog.countDocuments({ discordId, action: "toggle_module" });
+    const commandsChanged = await AuditLog.countDocuments({ discordId, action: "toggle_command" });
+    return res.json({ guildCount, settingsChanges, automationsCount, modulesChanged, commandsChanged });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to compute analytics" });
+  }
+});
+
+// -------------------------- User Preferences & Billing Endpoints --------------------------
+
+/**
+ * GET /api/user/preferences
+ */
+router.get("/user/preferences", CheckAuth, async (req, res) => {
+  const discordId = req.session.user.id;
+  try {
+    let prefs = await UserPreferences.findOne({ discordId });
+    if (!prefs) prefs = await UserPreferences.create({ discordId });
+    return res.json({ preferences: prefs });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to fetch preferences" });
+  }
+});
+
+/**
+ * PUT /api/user/preferences
+ * Update user preferences. Body: { defaultGuild?: string, emailExport?: boolean }
+ */
+router.put("/user/preferences", CheckAuth, async (req, res) => {
+  const discordId = req.session.user.id;
+  const schema = z
+    .object({
+      defaultGuild: z.string().optional().nullable(),
+      emailExport: z.boolean().optional(),
+    })
+    .strict();
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+  }
+  try {
+    const update = parsed.data;
+    const prefs = await UserPreferences.findOneAndUpdate(
+      { discordId },
+      { $set: update },
+      { new: true, upsert: true }
+    );
+    await createAudit(req, null, "update_preferences", update);
+    return res.json({ ok: true, preferences: prefs });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to update preferences" });
+  }
+});
+
+/**
+ * GET /api/billing
+ * Returns the billing plan for the current user.
+ */
+router.get("/billing", CheckAuth, async (req, res) => {
+  const discordId = req.session.user.id;
+  try {
+    let prefs = await UserPreferences.findOne({ discordId });
+    if (!prefs) prefs = await UserPreferences.create({ discordId });
+    return res.json({ plan: prefs.plan || "free" });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to fetch billing info" });
+  }
+});
+
+// -------------------------- News Endpoints --------------------------
+
+/**
+ * GET /api/news
+ * Returns all news posts, sorted by creation date descending.
+ */
+router.get("/news", CheckAuth, async (req, res) => {
+  try {
+    const posts = await NewsPost.find().sort({ createdAt: -1 }).lean();
+    return res.json({ posts });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to fetch news" });
+  }
+});
+
+// Check if user is admin; admin IDs set in env variable DASHBOARD_ADMIN_IDS as comma-separated list
+function isAdmin(discordId) {
+  const admins = process.env.DASHBOARD_ADMIN_IDS || "";
+  const list = admins.split(/[,\s]+/).filter(Boolean);
+  return list.includes(discordId);
+}
+
+/**
+ * POST /api/news
+ * Create a new news post. Requires admin.
+ */
+router.post("/news", CheckAuth, async (req, res) => {
+  const discordId = req.session.user.id;
+  if (!isAdmin(discordId)) return res.status(403).json({ error: "Forbidden" });
+  const schema = z
+    .object({
+      title: z.string().min(1),
+      content: z.string().min(1),
+    })
+    .strict();
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+  }
+  try {
+    const post = await NewsPost.create({ ...parsed.data, authorId: discordId });
+    await createAudit(req, null, "create_news", { id: post._id.toString() });
+    return res.json({ ok: true, post });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to create news post" });
+  }
+});
+
+/**
+ * PUT /api/news/:postId
+ * Update a news post. Requires admin.
+ */
+router.put("/news/:postId", CheckAuth, async (req, res) => {
+  const discordId = req.session.user.id;
+  if (!isAdmin(discordId)) return res.status(403).json({ error: "Forbidden" });
+  const postId = req.params.postId;
+  const schema = z
+    .object({
+      title: z.string().optional(),
+      content: z.string().optional(),
+    })
+    .strict();
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+  try {
+    const update = parsed.data;
+    const post = await NewsPost.findOneAndUpdate({ _id: postId }, { $set: update }, { new: true });
+    if (!post) return res.status(404).json({ error: "Not found" });
+    await createAudit(req, null, "update_news", { id: postId, ...update });
+    return res.json({ ok: true, post });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to update news post" });
+  }
+});
+
+/**
+ * DELETE /api/news/:postId
+ * Delete a news post. Requires admin.
+ */
+router.delete("/news/:postId", CheckAuth, async (req, res) => {
+  const discordId = req.session.user.id;
+  if (!isAdmin(discordId)) return res.status(403).json({ error: "Forbidden" });
+  const postId = req.params.postId;
+  try {
+    await NewsPost.deleteOne({ _id: postId });
+    await createAudit(req, null, "delete_news", { id: postId });
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to delete news post" });
+  }
 });
 
 module.exports = router;
