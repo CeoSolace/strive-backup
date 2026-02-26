@@ -1,0 +1,51 @@
+<% layout('layouts/app') -%>
+
+<%
+// Servers page. Receives 'user' (userInfos) with property displayedGuilds (array) if available
+// and 'search' (string) query. We preserve design by using existing card and action styles.
+const guilds = user?.displayedGuilds || [];
+%>
+
+<div class="flex flex-col gap-6">
+  <div class="flex flex-col gap-1">
+    <h1 class="text-2xl font-semibold tracking-tight">Servers</h1>
+    <p class="text-sm text-zinc-600 dark:text-zinc-300">Pick a server to manage settings, modules, and commands.</p>
+  </div>
+
+  <!-- Search bar -->
+  <form method="get" action="/app/servers">
+    <label class="sr-only" for="server-search">Search servers</label>
+    <div class="relative max-w-lg">
+      <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-400">⌕</div>
+      <input
+        id="server-search"
+        name="q"
+        type="search"
+        value="<%= search || '' %>"
+        placeholder="Search your servers…"
+        class="w-full rounded-2xl border border-zinc-200 bg-white px-10 py-2 text-sm shadow-sm placeholder:text-zinc-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-zinc-800 dark:bg-zinc-950 dark:placeholder:text-zinc-500"
+      />
+    </div>
+  </form>
+
+  <% if (guilds.length > 0) { %>
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <% guilds.forEach((g) => { %>
+        <a class="action" href="<%= g.settingsUrl %>">
+          <div class="flex items-center gap-3">
+            <img class="h-8 w-8 rounded-full" src="<%= g.iconURL %>" alt="" referrerpolicy="no-referrer" />
+            <div class="min-w-0">
+              <div class="truncate font-semibold"><%= g.name %></div>
+              <div class="action-sub">Manage server</div>
+            </div>
+          </div>
+        </a>
+      <% }) %>
+    </div>
+  <% } else { %>
+    <div class="rounded-2xl border border-zinc-200 p-6 text-center text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
+      <p>No servers found.</p>
+      <p class="mt-1">Make sure you have Manage Guild permissions or invite Bright to your servers.</p>
+    </div>
+  <% } %>
+</div>
