@@ -1,4 +1,5 @@
 const express = require("express");
+const utils = require("../utils");
 
 const router = express.Router();
 
@@ -14,13 +15,20 @@ router.get(["/", "/overview"], async (req, res) => {
 });
 
 router.get("/servers", async (req, res) => {
-  return page(res, "app/placeholder", "Servers", {
-    user: req.userInfos,
-    placeholder: {
-      title: "Servers",
-      description: "Pick a server to manage settings, modules, and commands.",
-      icon: "server",
-    },
+  // Allow filtering servers via ?q query
+  const query = typeof req.query.q === "string" && req.query.q.trim() ? req.query.q.trim() : "";
+  let userInfos = req.userInfos;
+  if (query) {
+    try {
+      // Re-fetch user to apply search filter to displayedGuilds
+      userInfos = await utils.fetchUser(req.user, req.client, query);
+    } catch (e) {
+      // fall back to existing userInfos on error
+    }
+  }
+  return page(res, "app/servers", "Servers", {
+    user: userInfos,
+    search: query,
   });
 });
 
