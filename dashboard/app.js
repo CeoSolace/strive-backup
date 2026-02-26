@@ -10,7 +10,6 @@ module.exports.launch = async (client) => {
   const session = require("express-session");
   const MongoStore = require("connect-mongo");
 
-  // These MUST exist in dependencies (added in package.json below)
   const helmet = require("helmet");
   const rateLimit = require("express-rate-limit");
   const cookieParser = require("cookie-parser");
@@ -24,10 +23,13 @@ module.exports.launch = async (client) => {
   const appPagesRouter = require("./routes/app-pages");
   const discordAuthRouter = require("./routes/discord");
   const apiRouter = require("./routes/api");
-  const logoutRouter = require("./routes/logout");
-  const guildManagerRouter = require("./routes/guild-manager");
-  const newsRouter = require("./routes/news");
-  const healthRouter = require("./routes/health");
+
+  // Optional routes (exist in your fixed repo; keeps safety if missing)
+  let logoutRouter, guildManagerRouter, newsRouter, healthRouter;
+  try { logoutRouter = require("./routes/logout"); } catch { logoutRouter = null; }
+  try { guildManagerRouter = require("./routes/guild-manager"); } catch { guildManagerRouter = null; }
+  try { newsRouter = require("./routes/news"); } catch { newsRouter = null; }
+  try { healthRouter = require("./routes/health"); } catch { healthRouter = null; }
 
   client.states = {};
   client.config = config;
@@ -49,10 +51,10 @@ module.exports.launch = async (client) => {
           "script-src": ["'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com", "https://unpkg.com"],
           "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
           "font-src": ["'self'", "https://fonts.gstatic.com", "data:"],
-          "connect-src": ["'self'", "https://discord.com", "https://discordapp.com"],
-        },
+          "connect-src": ["'self'", "https://discord.com", "https://discordapp.com"]
+        }
       },
-      crossOriginEmbedderPolicy: false,
+      crossOriginEmbedderPolicy: false
     })
   );
 
@@ -64,15 +66,22 @@ module.exports.launch = async (client) => {
       standardHeaders: true,
       legacyHeaders: false,
       message: { error: "Rate limit exceeded" },
-      skip: (req) => req.path.startsWith("/login") || req.path.startsWith("/auth/callback"),
+      skip: (req) => req.path.startsWith("/login") || req.path.startsWith("/auth/callback")
     })
   );
+
+  // View engines (ejs-mate optional)
+  try {
+    const ejsMate = require("ejs-mate");
+    app.engine("ejs", ejsMate);
+  } catch {
+    // fallback: standard EJS render (keeps dashboard alive even if ejs-mate missing)
+  }
 
   app
     .use(express.json({ limit: "1mb" }))
     .use(express.urlencoded({ extended: true }))
     .use(cookieParser())
-    .engine("ejs", require("ejs-mate"))
     .engine("html", require("ejs").renderFile)
     .set("view engine", "ejs")
     .use(express.static(path.join(__dirname, "/public"), { maxAge: "1h" }))
@@ -84,7 +93,7 @@ module.exports.launch = async (client) => {
           maxAge: 336 * 60 * 60 * 1000,
           httpOnly: true,
           sameSite: "lax",
-          secure: process.env.NODE_ENV === "production",
+          secure: process.env.NODE_ENV === "production"
         },
         name: "djs_connection_cookie",
         resave: false,
@@ -95,8 +104,8 @@ module.exports.launch = async (client) => {
           collectionName: "sessions",
           stringify: false,
           autoRemove: "interval",
-          autoRemoveInterval: 10,
-        }),
+          autoRemoveInterval: 10
+        })
       })
     )
     .use(async (req, res, next) => {
@@ -115,14 +124,14 @@ module.exports.launch = async (client) => {
     if (req.user && req.url !== "/") {
       try {
         req.userInfos = await utils.fetchUser(req.user, req.client);
-      } catch (e) {
+      } catch {
         req.userInfos = null;
       }
     }
     next();
   });
 
-  app.get("/health", healthRouter(client, db));
+  if (healthRouter) app.get("/health", healthRouter(client, db));
 
   // OAuth routes (no CSRF)
   app.use("/api", discordAuthRouter);
@@ -141,12 +150,11 @@ module.exports.launch = async (client) => {
     apiRouter
   );
 
-  app.use("/logout", logoutRouter);
-  app.use("/manage", guildManagerRouter);
-  app.use("/news", newsRouter);
+  if (logoutRouter) app.use("/logout", logoutRouter);
+  if (guildManagerRouter) app.use("/manage", guildManagerRouter);
+  if (newsRouter) app.use("/news", newsRouter);
 
   app.use("/app", CheckAuth, appPagesRouter);
-
   app.use("/", mainRouter);
 
   app.use(CheckAuth, (req, res) => {
