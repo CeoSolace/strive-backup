@@ -4,7 +4,25 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark light" />
-    <title><%= pageTitle ? pageTitle + ' · ' : '' %>Bright Dashboard</title>
+    <%
+      const titleEmojiMap = {
+        'Overview': '🏠',
+        'Servers': '🗂️',
+        'Modules': '🧩',
+        'Commands': '⌨️',
+        'Automations': '⚡',
+        'Logs': '📜',
+        'Analytics': '📊',
+        'Account': '👤',
+        'Privacy & Consent': '🛡️',
+        'Settings': '⚙️',
+        'Billing': '💳',
+        'News': '📰'
+      };
+      const _pt = (typeof pageTitle === 'string' && pageTitle.trim()) ? pageTitle.trim() : 'Dashboard';
+      const _emoji = titleEmojiMap[_pt] || '✨';
+    %>
+    <title><%= _emoji %> <%= _pt %> · Bright Dashboard</title>
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
