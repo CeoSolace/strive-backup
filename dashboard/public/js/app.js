@@ -43,6 +43,16 @@
       .replaceAll("'", '&#039;');
   }
 
+  function readConsentCookie() {
+    try {
+      const m = document.cookie.match(/(?:^|; )bright_consent=([^;]*)/);
+      if (!m) return null;
+      return JSON.parse(decodeURIComponent(m[1]));
+    } catch {
+      return null;
+    }
+  }
+
   async function api(path, opts = {}) {
     const headers = Object.assign(
       {
@@ -143,6 +153,25 @@
 
       state.me = await api('/api/me');
       hydrateMe();
+
+      // Pre-hydrate consent from cookie to avoid banner flicker
+      const cookie = readConsentCookie();
+      if (cookie && cookie.v) {
+        state.consent = {
+          hasChoice: true,
+          consent: {
+            version: cookie.v,
+            essential: true,
+            analytics: !!cookie.a,
+            diagnostics: !!cookie.d,
+            training: !!cookie.t,
+            marketing: !!cookie.m,
+          },
+          updatedAt: cookie.ts ? new Date(cookie.ts) : null,
+          source: 'cookie',
+        };
+        hydrateConsent();
+      }
 
       state.consent = await api('/api/consent');
       hydrateConsent();
