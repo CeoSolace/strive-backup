@@ -125,11 +125,9 @@
 
     btn.addEventListener('click', async () => {
       try {
-        // Most projects already have an invite URL pattern; keep safe default.
-        const clientId = state.me?.discord?.id || null;
-        const botId = state.me?.discord?.id || null;
-        const appId = botId; // fallback
-        const url = `https://discord.com/oauth2/authorize?client_id=${encodeURIComponent(appId || '')}&scope=bot%20applications.commands&permissions=2146958847`;
+        // Use fixed invite URL as configured by the dashboard requirements.
+        const url =
+          'https://discord.com/api/oauth2/authorize?client_id=1457843538401300480&scope=bot+applications.commands&permissions=8';
         window.open(url, '_blank', 'noopener,noreferrer');
       } catch (e) {
         toast('Invite failed', e.message, 'error');
