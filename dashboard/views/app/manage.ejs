@@ -1,0 +1,178 @@
+<% layout('layouts/app') -%>
+
+<div class="flex flex-col gap-6">
+  <div class="flex items-center gap-4">
+    <img class="h-12 w-12 rounded-full" src="<%= guild.iconURL %>" alt="" referrerpolicy="no-referrer" />
+    <div>
+      <h1 class="text-2xl font-semibold tracking-tight"><%= guild.name %></h1>
+      <p class="mt-0.5 text-sm text-zinc-600 dark:text-zinc-300">Manage server settings and features.</p>
+    </div>
+  </div>
+  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <a class="action" href="?tab=modules">
+      <div class="action-title">Modules</div>
+      <div class="action-sub">Enable/disable modules</div>
+    </a>
+    <a class="action" href="?tab=commands">
+      <div class="action-title">Commands</div>
+      <div class="action-sub">Manage command settings</div>
+    </a>
+    <a class="action" href="?tab=automations">
+      <div class="action-title">Automations</div>
+      <div class="action-sub">Manage automations</div>
+    </a>
+  </div>
+  <div>
+    <% if (tab === 'modules') { %>
+      <section class="card">
+        <div class="card-title">Modules</div>
+        <div id="modulesList" class="mt-4 space-y-2 text-sm"></div>
+      </section>
+    <% } else if (tab === 'commands') { %>
+      <section class="card">
+        <div class="card-title">Commands</div>
+        <div id="commandsList" class="mt-4 space-y-2 text-sm"></div>
+      </section>
+    <% } else if (tab === 'automations') { %>
+      <section class="card">
+        <div class="card-title">Automations</div>
+        <div id="automationsList" class="mt-4 space-y-2 text-sm"></div>
+        <button id="newAutomationBtn" class="btn btn-secondary mt-4">Add automation</button>
+      </section>
+    <% } else { %>
+      <section class="card">
+        <div class="card-title">Overview</div>
+        <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">Use the links above to configure modules, commands and automations.</p>
+      </section>
+    <% } %>
+  </div>
+</div>
+
+<script>
+  // Determine current tab and guild ID
+  const tab = '<%= tab || '' %>';
+  const guildId = '<%= guild.id %>';
+  async function getCsrf() {
+    const res = await fetch('/api/csrf', { credentials: 'same-origin' });
+    const data = await res.json();
+    return data.csrfToken;
+  }
+  async function loadModules() {
+    const res = await fetch(`/api/guild/${guildId}/modules`, { credentials: 'same-origin' });
+    const data = await res.json();
+    const container = document.getElementById('modulesList');
+    container.innerHTML = '';
+    const csrf = await getCsrf();
+    data.availableModules.forEach((m) => {
+      const enabled = data.enabled[m];
+      const div = document.createElement('div');
+      div.className = 'flex items-center gap-3';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = !!enabled;
+      checkbox.id = `mod-${m}`;
+      const label = document.createElement('label');
+      label.textContent = m;
+      label.htmlFor = checkbox.id;
+      checkbox.addEventListener('change', async () => {
+        try {
+          await fetch(`/api/guild/${guildId}/modules`, {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+            body: JSON.stringify({ module: m, enabled: checkbox.checked }),
+          });
+        } catch (ex) {
+          console.error('Failed to update module', ex);
+        }
+      });
+      div.appendChild(checkbox);
+      div.appendChild(label);
+      container.appendChild(div);
+    });
+  }
+  async function loadCommands() {
+    const res = await fetch(`/api/guild/${guildId}/commands`, { credentials: 'same-origin' });
+    const data = await res.json();
+    const container = document.getElementById('commandsList');
+    container.innerHTML = '';
+    const csrf = await getCsrf();
+    data.availableCommands.forEach((c) => {
+      const enabled = data.enabled[c];
+      const div = document.createElement('div');
+      div.className = 'flex items-center gap-3';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = !!enabled;
+      checkbox.id = `cmd-${c}`;
+      const label = document.createElement('label');
+      label.textContent = c;
+      label.htmlFor = checkbox.id;
+      checkbox.addEventListener('change', async () => {
+        try {
+          await fetch(`/api/guild/${guildId}/commands`, {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+            body: JSON.stringify({ command: c, enabled: checkbox.checked }),
+          });
+        } catch (ex) {
+          console.error('Failed to update command', ex);
+        }
+      });
+      div.appendChild(checkbox);
+      div.appendChild(label);
+      container.appendChild(div);
+    });
+  }
+  async function loadAutomations() {
+    const res = await fetch(`/api/guild/${guildId}/automations`, { credentials: 'same-origin' });
+    const data = await res.json();
+    const container = document.getElementById('automationsList');
+    if (!container) return;
+    container.innerHTML = '';
+    data.items.forEach((auto) => {
+      const div = document.createElement('div');
+      div.className = 'flex items-center justify-between gap-3';
+      const details = document.createElement('div');
+      details.innerHTML = `<strong>${auto.name}</strong><br/><span class="text-xs text-zinc-600 dark:text-zinc-400">${auto.schedule} – ${auto.action}</span>`;
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn btn-ghost btn-sm';
+      delBtn.textContent = 'Delete';
+      delBtn.addEventListener('click', async () => {
+        const csrf = await getCsrf();
+        await fetch(`/api/guild/${guildId}/automations/${auto._id}`, {
+          method: 'DELETE',
+          credentials: 'same-origin',
+          headers: { 'X-CSRF-Token': csrf },
+        });
+        loadAutomations();
+      });
+      div.appendChild(details);
+      div.appendChild(delBtn);
+      container.appendChild(div);
+    });
+  }
+  if (tab === 'modules') loadModules();
+  if (tab === 'commands') loadCommands();
+  if (tab === 'automations') loadAutomations();
+  const newBtn = document.getElementById('newAutomationBtn');
+  if (newBtn) {
+    newBtn.addEventListener('click', async () => {
+      const name = prompt('Name of automation');
+      if (!name) return;
+      const schedule = prompt('Schedule (e.g. every day at 9am)');
+      if (!schedule) return;
+      const action = prompt('Action');
+      if (!action) return;
+      const csrf = await getCsrf();
+      await fetch(`/api/guild/${guildId}/automations`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        body: JSON.stringify({ name, schedule, action }),
+      });
+      loadAutomations();
+    });
+  }
+</script>
