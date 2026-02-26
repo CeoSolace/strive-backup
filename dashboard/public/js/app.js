@@ -1,11 +1,15 @@
 (function () {
   const $ = (sel, root = document) => root.querySelector(sel);
-  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+  const state = { csrf: null, me: null };
 
-  const state = {
-    csrf: null,
-    me: null,
-  };
+  function escapeHtml(str) {
+    return String(str)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
 
   function toast(title, message, type = 'info') {
     const root = document.getElementById('toast-root');
@@ -18,10 +22,7 @@
       <div class="toast-title">${escapeHtml(title)}</div>
       ${message ? `<div class="toast-sub">${escapeHtml(message)}</div>` : ''}
     `;
-
-    if (type === 'error') {
-      el.style.borderColor = 'rgba(220,38,38,.35)';
-    }
+    if (type === 'error') el.style.borderColor = 'rgba(220,38,38,.35)';
 
     root.appendChild(el);
     setTimeout(() => {
@@ -32,43 +33,19 @@
     }, 3200);
   }
 
-  function escapeHtml(str) {
-    return String(str)
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
-      .replaceAll('"', '&quot;')
-      .replaceAll("'", '&#039;');
-  }
-
   async function api(path, opts = {}) {
-    const headers = Object.assign(
-      { 'Content-Type': 'application/json' },
-      opts.headers || {}
-    );
-
+    const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
     const method = (opts.method || 'GET').toUpperCase();
-    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && state.csrf) {
-      headers['X-CSRF-Token'] = state.csrf;
-    }
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && state.csrf) headers['X-CSRF-Token'] = state.csrf;
 
-    const res = await fetch(path, {
-      credentials: 'same-origin',
-      ...opts,
-      headers,
-    });
-
+    const res = await fetch(path, { credentials: 'same-origin', ...opts, headers });
     const newCsrf = res.headers.get('X-CSRF-Token');
     if (newCsrf) state.csrf = newCsrf;
 
-    const contentType = res.headers.get('content-type') || '';
-    const body = contentType.includes('application/json') ? await res.json() : await res.text();
+    const ct = res.headers.get('content-type') || '';
+    const body = ct.includes('application/json') ? await res.json() : await res.text();
 
-    if (!res.ok) {
-      const msg = typeof body === 'string' ? body : body?.error || 'Request failed';
-      throw new Error(msg);
-    }
-
+    if (!res.ok) throw new Error(typeof body === 'string' ? body : body?.error || 'Request failed');
     return body;
   }
 
@@ -76,9 +53,7 @@
     const root = document.documentElement;
     if (next === 'dark') root.classList.add('dark');
     else root.classList.remove('dark');
-    try {
-      localStorage.setItem('bright_theme', next);
-    } catch (e) {}
+    try { localStorage.setItem('bright_theme', next); } catch (e) {}
   }
 
   function toggleTheme() {
@@ -107,24 +82,16 @@
     document.addEventListener('click', (e) => {
       if (!menu.contains(e.target) && !btn.contains(e.target)) close();
     });
-
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') close();
-    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
   }
 
   function setupInviteCTA() {
     const btn = $('[data-action="invite"]');
     if (!btn) return;
-
-    btn.addEventListener('click', async () => {
-      try {
-        const url =
-          'https://discord.com/api/oauth2/authorize?client_id=1457843538401300480&scope=bot+applications.commands&permissions=8';
-        window.open(url, '_blank', 'noopener,noreferrer');
-      } catch (e) {
-        toast('Invite failed', e.message, 'error');
-      }
+    btn.addEventListener('click', () => {
+      const url =
+        'https://discord.com/api/oauth2/authorize?client_id=1457843538401300480&scope=bot+applications.commands&permissions=8';
+      window.open(url, '_blank', 'noopener,noreferrer');
     });
   }
 
@@ -167,11 +134,7 @@
     if (deleteBtn) {
       deleteBtn.addEventListener('click', async () => {
         const confirmText = prompt('Type DELETE to permanently remove your dashboard data.');
-        if (confirmText !== 'DELETE') {
-          toast('Cancelled', 'Account deletion was not confirmed.');
-          return;
-        }
-
+        if (confirmText !== 'DELETE') return toast('Cancelled', 'Account deletion was not confirmed.');
         try {
           deleteBtn.disabled = true;
           deleteBtn.textContent = 'Deleting…';
@@ -190,8 +153,7 @@
     const signoutAllBtn = $('[data-action="signout-all"]');
     if (signoutAllBtn) {
       signoutAllBtn.addEventListener('click', async () => {
-        const ok = confirm('Sign out all sessions for this account?');
-        if (!ok) return;
+        if (!confirm('Sign out all sessions for this account?')) return;
         try {
           signoutAllBtn.disabled = true;
           signoutAllBtn.textContent = 'Signing out…';
@@ -211,56 +173,6 @@
     const themeBtn = $('[data-action="toggle-theme"]');
     if (themeBtn) themeBtn.addEventListener('click', toggleTheme);
 
-    const search = $('[data-global-search]');
-    if (search) {
-      search.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          toast('Search', 'Global search is not wired yet.');
-        }
-      });
-    }
-
-    const openMobile = $('[data-action="open-mobile-nav"]');
-    if (openMobile) {
-      openMobile.addEventListener('click', () => {
-        let overlay = document.getElementById('mobile-nav-overlay');
-        if (!overlay) {
-          overlay = document.createElement('div');
-          overlay.id = 'mobile-nav-overlay';
-          overlay.style.position = 'fixed';
-          overlay.style.inset = '0';
-          overlay.style.zIndex = '60';
-          overlay.innerHTML = `
-            <div style="position:absolute;inset:0;background:rgba(0,0,0,.4)"></div>
-            <div id="mobile-nav-panel" style="position:absolute;left:0;top:0;bottom:0;width:88vw;max-width:22rem;overflow:auto"></div>
-          `;
-          document.body.appendChild(overlay);
-
-          overlay.addEventListener('click', (e) => {
-            if (e.target === overlay || e.target === overlay.firstElementChild) {
-              overlay.style.display = 'none';
-            }
-          });
-
-          document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') overlay.style.display = 'none';
-          });
-        }
-
-        const panel = document.getElementById('mobile-nav-panel');
-        const sidebar = document.getElementById('sidebar');
-        if (panel && sidebar) {
-          panel.innerHTML = '';
-          const clone = sidebar.cloneNode(true);
-          clone.classList.remove('hidden');
-          clone.classList.add('block');
-          panel.appendChild(clone);
-        }
-
-        overlay.style.display = 'block';
-      });
-    }
-
     setupUserMenu();
     setupInviteCTA();
   }
@@ -269,10 +181,8 @@
     try {
       const csrf = await api('/api/csrf');
       state.csrf = csrf.csrfToken;
-
       state.me = await api('/api/me');
       hydrateMe();
-
       setupAccountPage();
     } catch (e) {
       toast('Something went wrong', e.message, 'error');
