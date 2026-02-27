@@ -1,64 +1,152 @@
-<% layout('layouts/app') -%>
+<%- include("../partials/topbar") %>
 
-<div class="flex flex-col gap-6">
-  <div class="flex flex-col gap-1">
-    <h1 class="text-2xl font-semibold tracking-tight">Overview</h1>
-    <p class="text-sm text-zinc-600 dark:text-zinc-300">A premium home for managing Bright across your servers.</p>
+<div class="container mx-auto px-6 py-8">
+
+  <!-- ⚠️ PRODUCTION WARNING -->
+  <div style="
+    background: #ff4d4f;
+    color: white;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 25px;
+    font-weight: 600;
+    text-align: center;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+  ">
+    ⚠️ WARNING: This dashboard is nowhere near fully production finished.
+    Expect bugs, missing features, and incomplete functionality.
   </div>
 
-  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-    <div class="card">
-      <div class="card-header">Connected servers</div>
-      <div class="card-value" data-stat="guildCount">—</div>
-      <div class="card-sub">Servers you can manage</div>
-    </div>
-    <div class="card">
-      <div class="card-header">Consent status</div>
-      <div class="card-value" data-stat="consentSummary">—</div>
-      <div class="card-sub">Your privacy choices</div>
-    </div>
-    <div class="card">
-      <div class="card-header">Health</div>
-      <div class="card-value">Operational</div>
-      <div class="card-sub">Dashboard online</div>
-    </div>
-    <div class="card">
-      <div class="card-header">Next</div>
-      <div class="card-value">Invite</div>
-      <div class="card-sub">Add Bright to a server</div>
+  <!-- Page Title -->
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-3xl font-bold text-gray-800 dark:text-white">
+        Dashboard Overview
+      </h1>
+      <p class="text-gray-500 dark:text-gray-400 mt-1">
+        Welcome back, <%= user ? (user.username || user.global_name || "User") : "User" %>
+      </p>
     </div>
   </div>
 
-  <div class="grid gap-6 lg:grid-cols-3">
-    <section class="card lg:col-span-2">
-      <div class="card-title">Quick actions</div>
-      <div class="mt-4 grid gap-3 sm:grid-cols-2">
-        <a class="action" href="/app/servers">
-          <div class="action-title">Manage a server</div>
-          <div class="action-sub">Pick a guild and configure modules</div>
+  <!-- Info Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+
+    <!-- Discord Account -->
+    <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
+      <h2 class="text-lg font-semibold text-gray-700 dark:text-white mb-3">
+        Discord Account
+      </h2>
+
+      <% if (user) { %>
+        <div class="flex items-center space-x-4">
+          <img 
+            src="https://cdn.discordapp.com/avatars/<%= user.id %>/<%= user.avatar %>.png?size=128"
+            alt="Avatar"
+            class="w-16 h-16 rounded-full"
+          />
+          <div>
+            <p class="font-bold text-gray-800 dark:text-white">
+              <%= user.username %>
+            </p>
+            <p class="text-gray-500 dark:text-gray-400 text-sm">
+              ID: <%= user.id %>
+            </p>
+          </div>
+        </div>
+      <% } else { %>
+        <p class="text-gray-500">No user session detected.</p>
+      <% } %>
+    </div>
+
+    <!-- Bot Status -->
+    <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
+      <h2 class="text-lg font-semibold text-gray-700 dark:text-white mb-3">
+        Bot Status
+      </h2>
+
+      <p class="text-green-500 font-semibold">
+        ● Online
+      </p>
+
+      <% if (client) { %>
+        <p class="text-gray-500 dark:text-gray-400 text-sm mt-2">
+          Guilds: <%= client.guilds ? client.guilds.cache.size : "N/A" %>
+        </p>
+        <p class="text-gray-500 dark:text-gray-400 text-sm">
+          Uptime: <%= client.uptime ? Math.floor(client.uptime / 60000) + " minutes" : "N/A" %>
+        </p>
+      <% } %>
+    </div>
+
+    <!-- Quick Links -->
+    <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
+      <h2 class="text-lg font-semibold text-gray-700 dark:text-white mb-3">
+        Quick Links
+      </h2>
+
+      <div class="space-y-3">
+
+        <!-- Invite Bot -->
+        <a 
+          href="https://discord.com/api/oauth2/authorize?client_id=1457843538401300480&scope=bot+applications.commands&permissions=8"
+          target="_blank"
+          class="block w-full text-center bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded"
+        >
+          Invite Bot
         </a>
-        <a class="action" href="/app/privacy-consent">
-          <div class="action-title">Privacy &amp; Consent</div>
-          <div class="action-sub">Review what’s enabled and why</div>
+
+        <!-- Support Server -->
+        <a 
+          href="<%= client && client.config ? client.config.SUPPORT_SERVER : '#' %>"
+          target="_blank"
+          class="block w-full text-center bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded"
+        >
+          Support Server
         </a>
-        <a class="action" href="/app/account/profile">
-          <div class="action-title">Account</div>
-          <div class="action-sub">Export or delete your dashboard data</div>
-        </a>
-        <a class="action" href="/app/logs">
-          <div class="action-title">View logs</div>
-          <div class="action-sub">Audit actions and activity (placeholder)</div>
-        </a>
+
       </div>
-    </section>
+    </div>
 
-    <aside class="card">
-      <div class="card-title">Getting started</div>
-      <ol class="mt-4 space-y-3 text-sm text-zinc-600 dark:text-zinc-300">
-        <li class="flex gap-3"><span class="badge">1</span><span>Invite Bright to a server.</span></li>
-        <li class="flex gap-3"><span class="badge">2</span><span>Enable modules and commands.</span></li>
-        <li class="flex gap-3"><span class="badge">3</span><span>Set your privacy preferences.</span></li>
-      </ol>
-    </aside>
   </div>
+
+  <!-- Guilds Section -->
+  <div class="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
+    <h2 class="text-lg font-semibold text-gray-700 dark:text-white mb-4">
+      Your Servers
+    </h2>
+
+    <% if (user && user.guilds && user.guilds.length > 0) { %>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+        <% user.guilds.forEach(guild => { %>
+          <div class="border rounded-lg p-4 flex items-center justify-between">
+            <div>
+              <p class="font-semibold text-gray-800 dark:text-white">
+                <%= guild.name %>
+              </p>
+              <p class="text-xs text-gray-500">
+                ID: <%= guild.id %>
+              </p>
+            </div>
+
+            <a 
+              href="/app?guild=<%= guild.id %>"
+              class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-3 py-1 rounded"
+            >
+              Manage
+            </a>
+          </div>
+        <% }) %>
+
+      </div>
+    <% } else { %>
+      <p class="text-gray-500">
+        You are not currently managing any servers.
+      </p>
+    <% } %>
+  </div>
+
 </div>
+
+<%- include("../partials/sidebar") %>
