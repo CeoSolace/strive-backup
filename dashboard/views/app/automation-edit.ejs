@@ -1,0 +1,145 @@
+<% layout('layouts/app') -%>
+
+<%
+  const isCreate = mode === "create";
+  const actionUrl = isCreate
+    ? `/app/actions/automations/${guildId}`
+    : `/app/actions/automations/${guildId}/${automation._id}`;
+%>
+
+<div class="space-y-6">
+  <div class="flex items-start justify-between gap-4">
+    <div>
+      <h1 class="text-3xl font-bold"><%= isCreate ? "New Automation" : "Edit Automation" %></h1>
+      <p class="text-gray-600 mt-1">Guild: <span class="font-mono text-gray-800"><%= guildId %></span></p>
+    </div>
+    <a class="rounded-xl border px-4 py-2 text-sm hover:bg-gray-50" href="/app/automations/<%= guildId %>">
+      Back
+    </a>
+  </div>
+
+  <form method="POST" action="<%= actionUrl %>" class="rounded-2xl border bg-white p-6 shadow-sm space-y-5">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="text-sm font-medium text-gray-700">Name</label>
+        <input name="name" value="<%= automation?.name || "" %>"
+               class="mt-1 w-full rounded-xl border px-3 py-2" placeholder="e.g. Welcome keyword reply" />
+      </div>
+
+      <div>
+        <label class="text-sm font-medium text-gray-700">Type</label>
+        <select id="typeSelect" name="type" class="mt-1 w-full rounded-xl border px-3 py-2">
+          <option value="keyword_reply" <%= automation?.type === "keyword_reply" ? "selected" : "" %>>Keyword reply</option>
+          <option value="schedule_message" <%= automation?.type === "schedule_message" ? "selected" : "" %>>Scheduled message</option>
+          <option value="webhook_relay" <%= automation?.type === "webhook_relay" ? "selected" : "" %>>Webhook relay</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <input id="enabled" type="checkbox" name="enabled" <%= automation?.enabled ? "checked" : "" %> />
+      <label for="enabled" class="text-sm text-gray-700">Enabled</label>
+    </div>
+
+    <!-- Keyword reply -->
+    <div id="panel_keyword_reply" class="rounded-2xl border p-4 bg-gray-50 space-y-3">
+      <div class="font-semibold">Keyword Reply</div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="md:col-span-1">
+          <label class="text-sm font-medium text-gray-700">Match mode</label>
+          <select name="matchMode" class="mt-1 w-full rounded-xl border px-3 py-2">
+            <option value="exact" <%= automation?.config?.matchMode === "exact" ? "selected" : "" %>>Exact</option>
+            <option value="contains" <%= automation?.config?.matchMode === "contains" ? "selected" : "" %>>Contains</option>
+          </select>
+        </div>
+        <div class="md:col-span-2">
+          <label class="text-sm font-medium text-gray-700">Keyword</label>
+          <input name="keyword" value="<%= automation?.config?.keyword || "" %>"
+                 class="mt-1 w-full rounded-xl border px-3 py-2" placeholder="e.g. !help" />
+        </div>
+      </div>
+      <div>
+        <label class="text-sm font-medium text-gray-700">Reply</label>
+        <textarea name="reply" class="mt-1 w-full rounded-xl border px-3 py-2" rows="4"
+          placeholder="Message to send when matched"><%= automation?.config?.reply || "" %></textarea>
+      </div>
+    </div>
+
+    <!-- Scheduled message -->
+    <div id="panel_schedule_message" class="rounded-2xl border p-4 bg-gray-50 space-y-3">
+      <div class="font-semibold">Scheduled Message</div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="text-sm font-medium text-gray-700">Cron</label>
+          <input name="cron" value="<%= automation?.config?.cron || "" %>"
+                 class="mt-1 w-full rounded-xl border px-3 py-2" placeholder="e.g. 0 9 * * *" />
+          <div class="text-xs text-gray-500 mt-1">Server time cron expression.</div>
+        </div>
+        <div>
+          <label class="text-sm font-medium text-gray-700">Channel ID</label>
+          <input name="channelId" value="<%= automation?.config?.channelId || "" %>"
+                 class="mt-1 w-full rounded-xl border px-3 py-2" placeholder="123..." />
+        </div>
+      </div>
+      <div>
+        <label class="text-sm font-medium text-gray-700">Message</label>
+        <textarea name="message" class="mt-1 w-full rounded-xl border px-3 py-2" rows="4"
+          placeholder="Message to send on schedule"><%= automation?.config?.message || "" %></textarea>
+      </div>
+    </div>
+
+    <!-- Webhook relay -->
+    <div id="panel_webhook_relay" class="rounded-2xl border p-4 bg-gray-50 space-y-3">
+      <div class="font-semibold">Webhook Relay</div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="text-sm font-medium text-gray-700">Webhook URL</label>
+          <input name="webhookUrl" value="<%= automation?.config?.webhookUrl || "" %>"
+                 class="mt-1 w-full rounded-xl border px-3 py-2" placeholder="https://..." />
+        </div>
+        <div>
+          <label class="text-sm font-medium text-gray-700">Channel ID</label>
+          <input name="channelId" value="<%= automation?.config?.channelId || "" %>"
+                 class="mt-1 w-full rounded-xl border px-3 py-2" placeholder="123..." />
+        </div>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3 pt-2">
+      <button type="submit" class="rounded-xl bg-gray-900 text-white px-5 py-2 text-sm hover:bg-gray-800">
+        <%= isCreate ? "Create" : "Save" %>
+      </button>
+
+      <% if (!isCreate) { %>
+        <form method="POST" action="/app/actions/automations/<%= guildId %>/<%= automation._id %>/delete"
+              onsubmit="return confirm('Delete this automation?')">
+          <button type="submit" class="rounded-xl border px-5 py-2 text-sm hover:bg-red-50 text-red-700 border-red-200">
+            Delete
+          </button>
+        </form>
+      <% } %>
+    </div>
+  </form>
+</div>
+
+<script>
+  (function() {
+    const typeSelect = document.getElementById("typeSelect");
+    const panels = {
+      keyword_reply: document.getElementById("panel_keyword_reply"),
+      schedule_message: document.getElementById("panel_schedule_message"),
+      webhook_relay: document.getElementById("panel_webhook_relay"),
+    };
+
+    function show() {
+      const t = typeSelect.value;
+      Object.keys(panels).forEach(k => {
+        if (!panels[k]) return;
+        panels[k].style.display = (k === t) ? "block" : "none";
+      });
+    }
+
+    typeSelect.addEventListener("change", show);
+    show();
+  })();
+</script>
