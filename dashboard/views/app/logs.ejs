@@ -1,34 +1,47 @@
 <% layout('layouts/app') -%>
 
-<div class="flex flex-col gap-6">
+<div class="container mx-auto px-6 py-8 space-y-6">
   <div>
-    <h1 class="text-2xl font-semibold tracking-tight">Logs</h1>
-    <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">Recent actions you performed on the dashboard.</p>
+    <h1 class="text-3xl font-bold">Logs</h1>
+    <p class="text-gray-600 mt-1">Recent actions you performed on the dashboard.</p>
   </div>
+
   <% if (logs && logs.items && logs.items.length > 0) { %>
-  <div class="rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-x-auto">
-    <table class="min-w-full divide-y divide-zinc-200 dark:divide-zinc-800">
-      <thead class="bg-zinc-50 dark:bg-zinc-900">
-        <tr class="text-left text-xs uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-          <th class="px-4 py-2">Time</th>
-          <th class="px-4 py-2">Action</th>
-          <th class="px-4 py-2">Guild</th>
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
-        <% logs.items.forEach(function(log) { %>
-        <tr class="text-sm">
-          <td class="px-4 py-2 text-zinc-600 dark:text-zinc-300"><%= new Date(log.createdAt).toLocaleString() %></td>
-          <td class="px-4 py-2 font-mono"><%= log.action %></td>
-          <td class="px-4 py-2 text-zinc-600 dark:text-zinc-300"><%= log.guildId || '—' %></td>
-        </tr>
-        <% }); %>
-      </tbody>
-    </table>
-  </div>
+    <div class="overflow-x-auto rounded-2xl border bg-white shadow-sm">
+      <table class="min-w-full text-left text-sm">
+        <thead class="border-b bg-gray-50">
+          <tr>
+            <th class="px-4 py-3 font-semibold text-gray-700">Time</th>
+            <th class="px-4 py-3 font-semibold text-gray-700">Action</th>
+            <th class="px-4 py-3 font-semibold text-gray-700">Guild</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% logs.items.forEach(function(log) { %>
+            <tr class="border-b last:border-0">
+              <td class="px-4 py-3 text-gray-800"><%= new Date(log.createdAt).toLocaleString() %></td>
+              <td class="px-4 py-3 text-gray-800"><%= log.action %></td>
+              <td class="px-4 py-3 text-gray-800"><%= log.guildId || '—' %></td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <% if (logs.hasPrev) { %>
+        <a class="px-3 py-2 rounded-lg border hover:bg-gray-50" href="/app/logs?page=<%= (logs.page || 1) - 1 %>">Prev</a>
+      <% } %>
+
+      <span class="text-gray-600">Page <%= logs.page || 1 %></span>
+
+      <% if (logs.hasNext) { %>
+        <a class="px-3 py-2 rounded-lg border hover:bg-gray-50" href="/app/logs?page=<%= (logs.page || 1) + 1 %>">Next</a>
+      <% } %>
+    </div>
   <% } else { %>
-  <div class="rounded-2xl border border-zinc-200 p-6 text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
-    No audit logs yet.
-  </div>
+    <div class="rounded-2xl border bg-white p-6 shadow-sm">
+      <p class="text-gray-600">No audit logs yet.</p>
+    </div>
   <% } %>
 </div>
