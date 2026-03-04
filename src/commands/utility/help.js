@@ -140,7 +140,7 @@ async function getHelpMenu({ client, guild }, prefix = "=") {
 }
 
 // =========================
-// INTERACTION HANDLER
+// INTERACTION HANDLER (FIXED)
 // =========================
 const waiter = (msg, userId, prefix) => {
   const collector = msg.channel.createMessageComponentCollector({
@@ -150,32 +150,54 @@ const waiter = (msg, userId, prefix) => {
 
   let embeds = [];
   let page = 0;
-  let menuRow = msg.components[0];
-  let buttonsRow = msg.components[1];
+
+  // IMPORTANT: message components are "built" components.
+  // Convert them into builders so we can mutate (disable/enable) safely.
+  const menuRow = ActionRowBuilder.from(msg.components[0]);
+  const buttonsRow = ActionRowBuilder.from(msg.components[1]);
+
+  const setNavDisabled = () => {
+    const total = embeds.length;
+
+    const prevDisabled = total <= 1 || page === 0;
+    const nextDisabled = total <= 1 || page === total - 1;
+
+    const prevBtn = ButtonBuilder.from(buttonsRow.components[0]).setDisabled(prevDisabled);
+    const nextBtn = ButtonBuilder.from(buttonsRow.components[1]).setDisabled(nextDisabled);
+
+    buttonsRow.setComponents(prevBtn, nextBtn);
+  };
 
   collector.on("collect", async (i) => {
     await i.deferUpdate();
 
+    // Category select
     if (i.customId === "help-menu") {
       const category = i.values[0];
 
-      embeds =
-        prefix
-          ? getMsgCategoryEmbeds(msg.client, category, prefix)
-          : getSlashCategoryEmbeds(msg.client, category);
+      embeds = prefix
+        ? getMsgCategoryEmbeds(msg.client, category, prefix)
+        : getSlashCategoryEmbeds(msg.client, category);
 
       page = 0;
-      buttonsRow.components.forEach((b) =>
-        b.setDisabled(embeds.length <= 1)
-      );
+      setNavDisabled();
 
-      return msg.edit({ embeds: [embeds[0]], components: [menuRow, buttonsRow] });
+      return msg.edit({
+        embeds: [embeds[0]],
+        components: [menuRow, buttonsRow],
+      });
     }
 
-    if (i.customId === "previousBtn" && page > 0) page--;
-    if (i.customId === "nextBtn" && page < embeds.length - 1) page++;
+    // Pagination buttons
+    if (i.customId === "previousBtn") page = Math.max(0, page - 1);
+    if (i.customId === "nextBtn") page = Math.min(embeds.length - 1, page + 1);
 
-    await msg.edit({ embeds: [embeds[page]], components: [menuRow, buttonsRow] });
+    setNavDisabled();
+
+    await msg.edit({
+      embeds: [embeds[page]],
+      components: [menuRow, buttonsRow],
+    });
   });
 
   collector.on("end", () => msg.edit({ components: [] }).catch(() => {}));
@@ -220,11 +242,11 @@ function getMsgCategoryEmbeds(client, category, prefix) {
         .setAuthor({ name: "Anti-Nuke System" })
         .setDescription(
           "**Server Protection Active**\n\n" +
-          "• Detects nukes & mass admin abuse\n" +
-          "• Auto restores roles, channels & perms\n" +
-          "• Logs threats in `#bright-threats`\n" +
-          "• Owner review & restore panels\n\n" +
-          `Accessed via **\`${prefix}help\` only**`
+            "• Detects nukes & mass admin abuse\n" +
+            "• Auto restores roles, channels & perms\n" +
+            "• Logs threats in `#bright-threats`\n" +
+            "• Owner review & restore panels\n\n" +
+            `Accessed via **\`${prefix}help\` only**`
         ),
     ];
   }
@@ -248,8 +270,11 @@ function getMsgCategoryEmbeds(client, category, prefix) {
 // PAGINATION
 // =========================
 function buildPagedEmbeds(commands, slash, prefix = "") {
+  // Don't mutate the original array outside this function
+  const list = [...commands];
+
   const pages = [];
-  while (commands.length) pages.push(commands.splice(0, CMDS_PER_PAGE));
+  while (list.length) pages.push(list.splice(0, CMDS_PER_PAGE));
 
   return pages.map((page, i) =>
     new EmbedBuilder()
