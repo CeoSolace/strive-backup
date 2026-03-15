@@ -1,9 +1,6 @@
 // src/commands/information/antinuke.js
 // /antinuke guide
 // Explains the entire anti-nuke + Bright Review system.
-// Adds two buttons:
-//  - "Dumbify" (simpler explanation)
-//  - "ik what im talking about" (full nerd mode)
 
 const {
   EmbedBuilder,
@@ -14,56 +11,66 @@ const {
   ButtonStyle,
   ComponentType,
 } = require("discord.js");
+
 const { EMBED_COLORS } = require("@root/config.js");
 const { stripIndent } = require("common-tags");
 
 const BTN_DUMB = "antinuke:guide:dumbify";
 const BTN_NERD = "antinuke:guide:nerd";
 
-/** ---------- helpers ---------- **/
-function fmtBool(b) {
-  return b ? "✓" : "✕";
+/* ---------------- helpers ---------------- */
+
+function fmtBool(v) {
+  return v ? "✓" : "✕";
 }
 
 function permissionChecklistLines(guild) {
-  const me = guild.members.me;
+  const me =
+    guild.members.me ??
+    guild.members.cache.get(guild.client.user.id);
+
+  if (!me) return "Bot member not cached yet.";
+
+  const perms = me.permissions;
 
   const checks = [
     {
       name: "View Audit Log (strongly recommended)",
-      ok: me.permissions.has(PermissionsBitField.Flags.ViewAuditLog),
+      ok: perms.has(PermissionsBitField.Flags.ViewAuditLog),
       why: "identify who added bots / edited roles / nuked stuff",
     },
     {
       name: "Kick Members",
-      ok: me.permissions.has(PermissionsBitField.Flags.KickMembers),
+      ok: perms.has(PermissionsBitField.Flags.KickMembers),
       why: "kick dangerous bots immediately (Bright Review kick-first)",
     },
     {
       name: "Manage Roles",
-      ok: me.permissions.has(PermissionsBitField.Flags.ManageRoles),
+      ok: perms.has(PermissionsBitField.Flags.ManageRoles),
       why: "derole executors + revert admin grants + strip dangerous perms in lockdown",
     },
     {
       name: "Manage Channels",
-      ok: me.permissions.has(PermissionsBitField.Flags.ManageChannels),
-      why: "create #Bright-review if missing",
+      ok: perms.has(PermissionsBitField.Flags.ManageChannels),
+      why: "create #bright-review if missing",
     },
     {
       name: "Manage Webhooks",
-      ok: me.permissions.has(PermissionsBitField.Flags.ManageWebhooks),
+      ok: perms.has(PermissionsBitField.Flags.ManageWebhooks),
       why: "detect/contain webhook nukes",
     },
     {
       name: "Send Messages + Embed Links",
       ok:
-        me.permissions.has(PermissionsBitField.Flags.SendMessages) &&
-        me.permissions.has(PermissionsBitField.Flags.EmbedLinks),
+        perms.has(PermissionsBitField.Flags.SendMessages) &&
+        perms.has(PermissionsBitField.Flags.EmbedLinks),
       why: "post panels + alerts",
     },
   ];
 
-  return checks.map((c) => `- ${fmtBool(c.ok)} **${c.name}** — ${c.why}`).join("\n");
+  return checks
+    .map((c) => `- ${fmtBool(c.ok)} **${c.name}** — ${c.why}`)
+    .join("\n");
 }
 
 function buildButtons(disabled = false) {
@@ -82,50 +89,61 @@ function buildButtons(disabled = false) {
   return [new ActionRowBuilder().addComponents(dumbify, nerd)];
 }
 
-/** ---------- content builders ---------- **/
+/* ---------------- dumb embeds ---------------- */
+
 function buildDumbEmbeds(guild) {
   const overview = stripIndent`
-  This is an **anti-nuke** system. It assumes the server will be attacked because it’s Discord.
+This is an **anti-nuke** system. It assumes the server will be attacked because it’s Discord.
 
-  **It does 3 main things:**
-  1) **Stops scary bots**: if a bot shows up with dangerous permissions, it gets **kicked immediately**.
-  2) **Stops mass destruction**: if someone starts deleting channels/roles or banning people fast, it triggers **lockdown**.
-  3) **Stops role stripping**: if someone removes a bunch of roles quickly, they get **derolled** and the owner gets a decision panel.
-  `;
+**It does 3 main things:**
+1) **Stops scary bots** – if a bot shows up with dangerous permissions, it gets **kicked immediately**.
+2) **Stops mass destruction** – if someone starts deleting channels/roles or banning people fast, it triggers **lockdown**.
+3) **Stops role stripping** – if someone removes a bunch of roles quickly, they get **derolled** and the owner gets a decision panel.
+`;
 
-  const Bright = stripIndent`
-  ## 1) Bright Review (dangerous bots)
-  If a bot has perms like **Admin**, **Manage Roles**, **Manage Channels**, **Manage Webhooks**, **Ban/Kick**:
-  - bot is **kicked first**
-  - private **#bright-review** is created if missing
-  - owner gets buttons:
-    - ✅ **Accept** = allow this bot ID in future (even with dangerous perms)
-    - ❌ **Deny** = block this bot ID (auto-kicked forever)
+  const bright = stripIndent`
+## 1) Bright Review (dangerous bots)
 
-  It’s “approve/deny the bot ID”, not “trust vibes”.
-  `;
+If a bot has perms like **Admin**, **Manage Roles**, **Manage Channels**, **Manage Webhooks**, **Ban/Kick**:
+
+- bot is **kicked first**
+- private **#bright-review** is created if missing
+
+Owner gets buttons:
+
+✅ **Accept** = allow this bot ID in future  
+❌ **Deny** = block this bot ID (auto-kicked forever)
+
+It’s **approve/deny the bot ID**, not trusting vibes.
+`;
 
   const humans = stripIndent`
-  ## 2) Humans stripping roles fast
-  If someone removes **5+ roles** within about **3 minutes**:
-  - executor gets **derolled** (roles removed, managed roles kept)
-  - owner gets a panel:
-    - ✅ **Restore Roles**
-    - ❌ **Keep Derolled**
-  `;
+## 2) Humans stripping roles fast
+
+If someone removes **5+ roles** within about **3 minutes**:
+
+- executor gets **derolled**
+- owner gets panel:
+
+✅ Restore Roles  
+❌ Keep Derolled
+`;
 
   const nukes = stripIndent`
-  ## 3) Anti-nuke lockdown
-  If someone does too many destructive actions quickly (delete channels, delete roles, webhook spam, mass bans):
-  - triggers **LOCKDOWN**
-  - LOCKDOWN removes dangerous permissions from roles so the attacker can’t keep nuking
-  - you still review audit logs and clean up
-  `;
+## 3) Anti-nuke lockdown
+
+If someone does destructive actions quickly (delete channels, roles, bans, webhook spam):
+
+- triggers **LOCKDOWN**
+- dangerous role permissions get stripped
+- attacker loses ability to continue
+`;
 
   const perms = stripIndent`
-  ## Permissions needed (or it’s just theatre)
-  ${permissionChecklistLines(guild)}
-  `;
+## Permissions needed (or it's theatre)
+
+${permissionChecklistLines(guild)}
+`;
 
   return [
     new EmbedBuilder()
@@ -155,97 +173,79 @@ function buildDumbEmbeds(guild) {
   ];
 }
 
+/* ---------------- nerd embeds ---------------- */
+
 function buildNerdEmbeds(guild) {
   const overview = stripIndent`
-  This module is two systems welded together with paranoia:
+Two systems combined:
 
-  **A) Bright Review (Bot gate)**
-  - Per-guild **approved/denied** bot ID sets.
-  - Detects dangerous perms on **join** and **later role updates**.
-  - Enforces **kick first**, then posts an owner decision panel.
+**A) Bright Review**
+Bot approval system with kick-first enforcement.
 
-  **B) Anti-nuke counters + lockdown**
-  - Uses audit logs to attribute actions to an executor.
-  - If an executor exceeds limits in a short window, triggers **lockdown** to strip dangerous perms from roles.
+**B) Anti-nuke protection**
+Counters destructive actions and triggers lockdown.
+`;
 
-  Plus human protections:
-  - anti mass role removal (derole executor + owner restore/keep)
-  - optional admin-grant revert unless whitelisted
-  `;
+  const bright = stripIndent`
+## Bright Review
 
-  const Bright = stripIndent`
-  ## A) Bright Review (Bot gate)
+Dangerous perms trigger review:
 
-  **Dangerous perms trigger list**
-  - Administrator, ManageGuild, ManageRoles, ManageChannels, ManageWebhooks, BanMembers, KickMembers
+Administrator  
+ManageGuild  
+ManageRoles  
+ManageChannels  
+ManageWebhooks  
+BanMembers  
+KickMembers
 
-  **Decision memory**
-  - approvedBots[guildId] -> Set(botId)
-  - deniedBots[guildId]   -> Set(botId)
+Bot joins → checked  
+Role update → checked
 
-  **Enforcement points**
-  - guildMemberAdd (bot):
-    - denied -> kick + panel
-    - not approved + dangerous -> kick + panel
-  - guildMemberUpdate (bot):
-    - if roles changed and now dangerous and not approved -> kick + panel
-    - denied -> kick + panel
+If dangerous and not approved:
 
-  **Kick-first**
-  - kick if possible; otherwise roles.set([]) fallback
-
-  **Dedupe**
-  - avoids multi-panels per bot within a time window
-  - pending timestamps prevent reacting to our own enforcement loops
-
-  **Review channel**
-  - creates private #bright-review if missing (owner + bot + optional admin ID)
-  - Accept/Deny buttons only work for owner/extra admin
-  `;
+→ bot kicked  
+→ owner panel appears
+`;
 
   const humans = stripIndent`
-  ## B) Human protections
+## Human protections
 
-  ### 1) Anti mass role removal
-  - Detect role decreases in guildMemberUpdate (humans)
-  - Attribute executor via AuditLogEvent.MemberRoleUpdate
-  - Track executor removal count in ~180s window
-  - On threshold:
-    - derole executor (keep managed roles)
-    - snapshot removed roles
-    - owner gets Restore/Keep panel
+Mass role removal detection:
 
-  ### 2) Optional admin-grant revert
-  - If member gains Administrator and isn’t whitelisted:
-    - revert to old roles snapshot (best-effort)
-  `;
+- track executor via audit logs
+- count removals in 180s window
+- threshold triggers:
 
-  const nuke = stripIndent`
-  ## C) Anti-nuke counters + lockdown
+→ derole executor  
+→ snapshot roles  
+→ owner panel
+`;
 
-  **Attribution**
-  - fetchAuditLogs() with short freshness window to reduce stale matches
+  const nukes = stripIndent`
+## Anti-nuke system
 
-  **Counters**
-  - actorCache[guildId:userId] tracks action counts in rolling window
-  - once a limit is exceeded:
-    - lockdown runs and strips dangerous perms from roles
+Counters destructive actions:
 
-  **Events monitored**
-  - channelDelete/channelCreate/channelUpdate(overwrite edits)
-  - roleDelete/roleCreate/roleUpdate(dangerous perms gained)
-  - guildBanAdd
-  - webhooksUpdate
+channelDelete  
+channelCreate  
+roleDelete  
+roleCreate  
+guildBanAdd  
+webhooksUpdate
 
-  **Lockdown result**
-  - removes Admin/Manage*/Ban/Kick perms from roles (excluding managed + @everyone)
-  - posts an alert in a writable channel
-  `;
+If threshold exceeded:
+
+→ **LOCKDOWN**
+
+Lockdown strips dangerous permissions from roles.
+`;
 
   const perms = stripIndent`
-  ## Permissions needed
-  ${permissionChecklistLines(guild)}
-  `;
+## Permissions needed
+
+${permissionChecklistLines(guild)}
+`;
 
   return [
     new EmbedBuilder()
@@ -254,9 +254,9 @@ function buildNerdEmbeds(guild) {
       .setDescription(overview),
 
     new EmbedBuilder()
-      .setTitle("Bright Review: Bot Gate")
+      .setTitle("Bright Review")
       .setColor(EMBED_COLORS.BOT_EMBED)
-      .setDescription(Bright),
+      .setDescription(bright),
 
     new EmbedBuilder()
       .setTitle("Human Protections")
@@ -264,9 +264,9 @@ function buildNerdEmbeds(guild) {
       .setDescription(humans),
 
     new EmbedBuilder()
-      .setTitle("Anti-Nuke Counters + Lockdown")
+      .setTitle("Anti-nuke Lockdown")
       .setColor(EMBED_COLORS.BOT_EMBED)
-      .setDescription(nuke),
+      .setDescription(nukes),
 
     new EmbedBuilder()
       .setTitle("Permission Checklist")
@@ -275,17 +275,18 @@ function buildNerdEmbeds(guild) {
   ];
 }
 
-/** ---------- command ---------- **/
+/* ---------------- command ---------------- */
+
 module.exports = {
   name: "antinuke",
-  description: "anti-nuke + Bright Review guide",
+  description: "Anti-nuke + Bright Review guide",
   category: "INFORMATION",
   userPermissions: ["ManageGuild"],
 
   command: {
     enabled: true,
     minArgsCount: 1,
-    subcommands: [{ trigger: "guide", description: "explain the entire anti-nuke system" }],
+    subcommands: [{ trigger: "guide" }],
   },
 
   slashCommand: {
@@ -294,7 +295,7 @@ module.exports = {
     options: [
       {
         name: "guide",
-        description: "explain the entire anti-nuke system",
+        description: "Explain the anti-nuke system",
         type: ApplicationCommandOptionType.Subcommand,
       },
     ],
@@ -302,84 +303,70 @@ module.exports = {
 
   async messageRun(message) {
     const args = message.content.trim().split(/\s+/).slice(1);
-    const sub = (args[0] || "").toLowerCase();
-    if (sub !== "guide") return message.safeReply("Invalid command usage! Try: `=antinuke guide`");
+    if (args[0]?.toLowerCase() !== "guide")
+      return message.safeReply("Try: `=antinuke guide`");
 
     const msg = await message.safeReply({
       embeds: buildNerdEmbeds(message.guild),
       components: buildButtons(false),
     });
 
-    if (!msg || typeof msg.createMessageComponentCollector !== "function") return;
-
     const collector = msg.createMessageComponentCollector({
       componentType: ComponentType.Button,
-      time: 120_000,
+      time: 120000,
       filter: (i) => i.user.id === message.author.id,
     });
 
     collector.on("collect", async (i) => {
-      if (i.customId === BTN_DUMB) {
-        await i
-          .update({ embeds: buildDumbEmbeds(message.guild), components: buildButtons(false) })
-          .catch(() => {});
-        return;
-      }
+      if (i.customId === BTN_DUMB)
+        return i.update({
+          embeds: buildDumbEmbeds(message.guild),
+          components: buildButtons(false),
+        });
 
-      if (i.customId === BTN_NERD) {
-        await i
-          .update({ embeds: buildNerdEmbeds(message.guild), components: buildButtons(false) })
-          .catch(() => {});
-        return;
-      }
+      if (i.customId === BTN_NERD)
+        return i.update({
+          embeds: buildNerdEmbeds(message.guild),
+          components: buildButtons(false),
+        });
     });
 
-    collector.on("end", async () => {
-      await msg.edit({ components: buildButtons(true) }).catch(() => {});
+    collector.on("end", () => {
+      msg.edit({ components: buildButtons(true) }).catch(() => {});
     });
   },
 
   async interactionRun(interaction) {
-    const sub = interaction.options.getSubcommand();
-    if (sub !== "guide") return interaction.followUp("Invalid command usage!");
+    await interaction.deferReply({ ephemeral: true });
 
-    // MUST defer or reply before editReply/followUp, or Discord screams.
-    await interaction.deferReply({ ephemeral: true }).catch(() => {});
-
-    const msg = await interaction
-      .editReply({
-        embeds: buildNerdEmbeds(interaction.guild),
-        components: buildButtons(false),
-        fetchReply: true,
-      })
-      .catch(() => null);
-
-    if (!msg || typeof msg.createMessageComponentCollector !== "function") return;
+    const msg = await interaction.editReply({
+      embeds: buildNerdEmbeds(interaction.guild),
+      components: buildButtons(false),
+      fetchReply: true,
+    });
 
     const collector = msg.createMessageComponentCollector({
       componentType: ComponentType.Button,
-      time: 120_000,
+      time: 120000,
       filter: (i) => i.user.id === interaction.user.id,
     });
 
     collector.on("collect", async (i) => {
-      if (i.customId === BTN_DUMB) {
-        await i
-          .update({ embeds: buildDumbEmbeds(interaction.guild), components: buildButtons(false) })
-          .catch(() => {});
-        return;
-      }
+      if (i.customId === BTN_DUMB)
+        return i.update({
+          embeds: buildDumbEmbeds(interaction.guild),
+          components: buildButtons(false),
+        });
 
-      if (i.customId === BTN_NERD) {
-        await i
-          .update({ embeds: buildNerdEmbeds(interaction.guild), components: buildButtons(false) })
-          .catch(() => {});
-        return;
-      }
+      if (i.customId === BTN_NERD)
+        return i.update({
+          embeds: buildNerdEmbeds(interaction.guild),
+          components: buildButtons(false),
+        });
     });
 
-    collector.on("end", async () => {
-      await msg.edit({ components: buildButtons(true) }).catch(() => {});
+    collector.on("end", () => {
+      msg.edit({ components: buildButtons(true) }).catch(() => {});
     });
   },
 };
