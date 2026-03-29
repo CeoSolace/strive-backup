@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark light" />
+
     <%
       const titleEmojiMap = {
         'Overview': '🏠',
@@ -19,11 +20,17 @@
         'Billing': '💳',
         'News': '📰'
       };
-      const _pt = (typeof pageTitle === 'string' && pageTitle.trim()) ? pageTitle.trim() : 'Dashboard';
+
+      const _pt = (typeof pageTitle === 'string' && pageTitle.trim())
+        ? pageTitle.trim()
+        : 'Dashboard';
+
       const _emoji = titleEmojiMap[_pt] || '✨';
     %>
+
     <title><%= _emoji %> <%= _pt %> · Bright Dashboard</title>
 
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -31,6 +38,7 @@
       rel="stylesheet"
     />
 
+    <!-- Tailwind -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -38,7 +46,7 @@
         theme: {
           extend: {
             fontFamily: {
-              sans: ['Inter', 'ui-sans-serif', 'system-ui', 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji'],
+              sans: ['Inter', 'ui-sans-serif', 'system-ui'],
             },
             boxShadow: {
               soft: '0 1px 2px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.08)',
@@ -62,40 +70,86 @@
       };
     </script>
 
+    <!-- App Styles -->
     <link rel="stylesheet" href="/css/app.css" />
-  </head>
 
-  <body class="h-full bg-zinc-50 text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-50">
+    <!-- Prevent theme flash (FIX) -->
     <script>
       (function () {
         try {
-          var saved = localStorage.getItem('bright_theme');
-          var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-          var theme = saved || (prefersDark ? 'dark' : 'light');
-          if (theme === 'dark') document.documentElement.classList.add('dark');
+          const saved = localStorage.getItem('bright_theme');
+          const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          const theme = saved || (prefersDark ? 'dark' : 'light');
+
+          if (theme === 'dark') {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
         } catch (e) {}
       })();
     </script>
+  </head>
+
+  <body class="h-full bg-zinc-50 text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-50">
 
     <div class="min-h-full">
       <div class="flex min-h-screen">
-        <%- include('../partials/sidebar', { user, activePath: (typeof activePath !== 'undefined' ? activePath : '') }) %>
 
+        <!-- Sidebar -->
+        <%- include('../partials/sidebar', {
+          user,
+          activePath: (typeof activePath !== 'undefined' ? activePath : '')
+        }) %>
+
+        <!-- Main Content -->
         <div class="flex min-w-0 flex-1 flex-col">
+
+          <!-- Topbar -->
           <%- include('../partials/topbar', { user }) %>
 
+          <!-- Page Content -->
           <main class="flex-1">
             <div class="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
               <%- body %>
             </div>
           </main>
 
-          <div id="toast-root" class="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center px-4"></div>
+          <!-- Toast Notifications -->
+          <div
+            id="toast-root"
+            class="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center px-4 space-y-2"
+          ></div>
+
         </div>
       </div>
     </div>
 
-    <!-- consent banner removed -->
+    <!-- Global Scripts -->
     <script src="/js/app.js"></script>
+
+    <!-- Toast System (NEW) -->
+    <script>
+      window.showToast = function (message, type = 'info') {
+        const root = document.getElementById('toast-root');
+
+        const colors = {
+          info: 'bg-zinc-900 text-white',
+          success: 'bg-green-600 text-white',
+          error: 'bg-red-600 text-white',
+        };
+
+        const el = document.createElement('div');
+        el.className = `pointer-events-auto px-4 py-2 rounded-lg shadow-soft text-sm ${colors[type]} animate-fade-in`;
+        el.textContent = message;
+
+        root.appendChild(el);
+
+        setTimeout(() => {
+          el.remove();
+        }, 3000);
+      };
+    </script>
+
   </body>
 </html>
