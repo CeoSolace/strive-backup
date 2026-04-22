@@ -1,0 +1,46 @@
+<% layout('layouts/app') -%>
+
+<section class="mx-auto max-w-4xl p-6">
+  <h1 class="mb-4 text-3xl font-bold">Billing</h1>
+
+  <div class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <p class="mb-4 text-zinc-800 dark:text-zinc-200">
+      Your current plan:
+      <strong id="billing-plan">Free</strong>
+    </p>
+
+    <p class="text-zinc-600 dark:text-zinc-300">
+      Thank you for using Strive Dashboard. At the moment we only offer a free plan.
+      Paid plans with additional features are coming soon.
+    </p>
+
+    <p id="billing-status" class="mt-4 text-sm text-zinc-500 dark:text-zinc-400"></p>
+  </div>
+
+  <script>
+    async function loadBilling() {
+      const planEl = document.getElementById("billing-plan");
+      const statusEl = document.getElementById("billing-status");
+
+      try {
+        const res = await fetch("/api/billing", {
+          credentials: "same-origin",
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          statusEl.textContent = data?.error || "Failed to load billing info.";
+          return;
+        }
+
+        const plan = data?.plan || "free";
+        planEl.textContent = plan.charAt(0).toUpperCase() + plan.slice(1);
+      } catch (err) {
+        statusEl.textContent = "Failed to load billing info.";
+      }
+    }
+
+    loadBilling();
+  </script>
+</section>

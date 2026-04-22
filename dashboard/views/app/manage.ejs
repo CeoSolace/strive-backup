@@ -1,0 +1,547 @@
+<% layout('layouts/app') -%>
+
+<%
+  const safeGuild = typeof guild !== "undefined" && guild ? guild : null;
+  const safeTab = typeof tab === "string" && tab ? tab : "overview";
+%>
+
+<div class="flex flex-col gap-6">
+  <div class="flex items-center gap-4">
+    <img
+      class="h-12 w-12 rounded-full"
+      src="<%= safeGuild?.iconURL || 'https://cdn.discordapp.com/embed/avatars/0.png' %>"
+      alt=""
+      referrerpolicy="no-referrer"
+    />
+    <div class="min-w-0">
+      <h1 class="truncate text-2xl font-semibold tracking-tight"><%= safeGuild?.name || "Server" %></h1>
+      <p class="mt-0.5 text-sm text-zinc-600 dark:text-zinc-300">
+        Manage server settings, modules, commands, and automations.
+      </p>
+    </div>
+  </div>
+
+  <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+    <a class="action <%= safeTab === 'overview' ? 'ring-2 ring-brand-500/30' : '' %>" href="?tab=overview">
+      <div class="action-title">Overview</div>
+      <div class="action-sub">Quick server summary</div>
+    </a>
+    <a class="action <%= safeTab === 'settings' ? 'ring-2 ring-brand-500/30' : '' %>" href="?tab=settings">
+      <div class="action-title">Settings</div>
+      <div class="action-sub">Guild preferences</div>
+    </a>
+    <a class="action <%= safeTab === 'modules' ? 'ring-2 ring-brand-500/30' : '' %>" href="?tab=modules">
+      <div class="action-title">Modules</div>
+      <div class="action-sub">Enable or disable modules</div>
+    </a>
+    <a class="action <%= safeTab === 'commands' ? 'ring-2 ring-brand-500/30' : '' %>" href="?tab=commands">
+      <div class="action-title">Commands</div>
+      <div class="action-sub">Control command access</div>
+    </a>
+    <a class="action <%= safeTab === 'automations' ? 'ring-2 ring-brand-500/30' : '' %>" href="?tab=automations">
+      <div class="action-title">Automations</div>
+      <div class="action-sub">Create simple workflows</div>
+    </a>
+  </div>
+
+  <% if (safeTab === "overview") { %>
+    <section class="grid gap-4 md:grid-cols-3">
+      <div class="card">
+        <div class="card-header">Guild</div>
+        <div class="card-value truncate"><%= safeGuild?.name || "Unknown" %></div>
+        <div class="card-sub">ID: <span class="font-mono"><%= safeGuild?.id || "N/A" %></span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">Permissions</div>
+        <div class="card-value">Admin</div>
+        <div class="card-sub">You can manage this server in Bright.</div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">Quick access</div>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <a class="btn btn-secondary" href="?tab=settings">Settings</a>
+          <a class="btn btn-secondary" href="?tab=modules">Modules</a>
+          <a class="btn btn-secondary" href="?tab=commands">Commands</a>
+        </div>
+      </div>
+
+      <div class="card md:col-span-3">
+        <div class="card-title">What you can do here</div>
+        <div class="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+            <div class="font-semibold">Settings</div>
+            <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">Save custom guild-level preferences.</p>
+          </div>
+          <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+            <div class="font-semibold">Modules</div>
+            <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">Turn major bot systems on or off.</p>
+          </div>
+          <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+            <div class="font-semibold">Commands</div>
+            <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">Disable commands you do not want used.</p>
+          </div>
+          <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+            <div class="font-semibold">Automations</div>
+            <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">Create simple scheduled actions and workflows.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  <% } %>
+
+  <% if (safeTab === "settings") { %>
+    <section class="card">
+      <div class="card-title">Guild settings</div>
+      <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
+        Save a JSON settings object for this guild.
+      </p>
+
+      <div class="mt-4">
+        <label class="block text-xs font-semibold uppercase tracking-wider text-zinc-500">Settings JSON</label>
+        <textarea
+          id="guildSettingsJson"
+          class="mt-2 min-h-[300px] w-full rounded-xl border border-zinc-300 p-3 font-mono text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+          spellcheck="false"
+          placeholder='{"prefix":"!","welcomeChannel":"1234567890"}'
+        ></textarea>
+      </div>
+
+      <div class="mt-4 flex items-center gap-2">
+        <button id="saveGuildSettings" class="btn btn-secondary">Save settings</button>
+        <span id="settingsStatus" class="text-sm text-zinc-600 dark:text-zinc-300"></span>
+      </div>
+    </section>
+  <% } %>
+
+  <% if (safeTab === "modules") { %>
+    <section class="card">
+      <div class="card-title">Modules</div>
+      <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
+        Toggle core systems for this server.
+      </p>
+      <div id="modulesList" class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3"></div>
+    </section>
+  <% } %>
+
+  <% if (safeTab === "commands") { %>
+    <section class="card">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <div class="card-title">Commands</div>
+          <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
+            Enable or disable commands for this guild.
+          </p>
+        </div>
+        <input
+          id="commandSearch"
+          type="search"
+          placeholder="Search commands..."
+          class="w-full max-w-xs rounded-xl border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+        />
+      </div>
+      <div id="commandsList" class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3"></div>
+    </section>
+  <% } %>
+
+  <% if (safeTab === "automations") { %>
+    <div class="grid gap-6 xl:grid-cols-3">
+      <section class="card xl:col-span-2">
+        <div class="card-title">Create automation</div>
+        <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
+          This builder uses the current API shape: name, schedule, action, and params.
+        </p>
+
+        <div class="mt-4 grid gap-4 md:grid-cols-2">
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-zinc-500">Name</label>
+            <input
+              id="automationName"
+              type="text"
+              class="mt-2 w-full rounded-xl border border-zinc-300 p-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+              placeholder="Welcome reminder"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-zinc-500">Schedule</label>
+            <input
+              id="automationSchedule"
+              type="text"
+              class="mt-2 w-full rounded-xl border border-zinc-300 p-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+              placeholder="0 9 * * *"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-zinc-500">Action</label>
+            <select
+              id="automationAction"
+              class="mt-2 w-full rounded-xl border border-zinc-300 p-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+            >
+              <option value="send_message">send_message</option>
+              <option value="dm_user">dm_user</option>
+              <option value="assign_role">assign_role</option>
+              <option value="remove_role">remove_role</option>
+              <option value="custom_webhook">custom_webhook</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-zinc-500">Params JSON</label>
+            <input
+              id="automationParams"
+              type="text"
+              class="mt-2 w-full rounded-xl border border-zinc-300 p-2 font-mono text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+              placeholder='{"channelId":"123","message":"Hello"}'
+            />
+          </div>
+        </div>
+
+        <div class="mt-4 flex items-center gap-2">
+          <button id="createAutomation" class="btn btn-secondary">Create automation</button>
+          <span id="automationStatus" class="text-sm text-zinc-600 dark:text-zinc-300"></span>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-title">Saved automations</div>
+        <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">Manage existing workflows.</p>
+        <div id="automationList" class="mt-4 space-y-3"></div>
+      </section>
+    </div>
+  <% } %>
+</div>
+
+<script>
+  const currentTab = "<%= safeTab %>";
+  const guildId = "<%= safeGuild?.id || "" %>";
+
+  async function getCsrf() {
+    const res = await fetch("/api/csrf", { credentials: "same-origin" });
+    const data = await res.json();
+    return data.csrfToken;
+  }
+
+  async function api(url, options = {}) {
+    const finalOptions = { credentials: "same-origin", ...options };
+    if (finalOptions.method && finalOptions.method !== "GET") {
+      const csrf = await getCsrf();
+      finalOptions.headers = {
+        ...(finalOptions.headers || {}),
+        "X-CSRF-Token": csrf,
+      };
+    }
+    const res = await fetch(url, finalOptions);
+    const contentType = res.headers.get("content-type") || "";
+    const body = contentType.includes("application/json") ? await res.json() : await res.text();
+    if (!res.ok) {
+      throw new Error((body && body.error) || "Request failed");
+    }
+    return body;
+  }
+
+  function makeToggleCard(title, description, checked, onChange) {
+    const wrap = document.createElement("div");
+    wrap.className = "rounded-xl border border-zinc-200 p-4 dark:border-zinc-800";
+
+    const top = document.createElement("div");
+    top.className = "flex items-start justify-between gap-3";
+
+    const text = document.createElement("div");
+    const h = document.createElement("div");
+    h.className = "font-semibold";
+    h.textContent = title;
+
+    const p = document.createElement("div");
+    p.className = "mt-1 text-sm text-zinc-600 dark:text-zinc-300";
+    p.textContent = description;
+
+    text.appendChild(h);
+    text.appendChild(p);
+
+    const label = document.createElement("label");
+    label.className = "switch";
+
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = !!checked;
+
+    const slider = document.createElement("span");
+    slider.className = "slider";
+
+    input.addEventListener("change", () => onChange(input.checked, input));
+
+    label.appendChild(input);
+    label.appendChild(slider);
+
+    top.appendChild(text);
+    top.appendChild(label);
+    wrap.appendChild(top);
+
+    return wrap;
+  }
+
+  async function loadSettingsTab() {
+    const textarea = document.getElementById("guildSettingsJson");
+    const status = document.getElementById("settingsStatus");
+    const saveBtn = document.getElementById("saveGuildSettings");
+
+    try {
+      const data = await api(`/api/guild/${guildId}/settings`);
+      textarea.value = JSON.stringify(data.settings || {}, null, 2);
+    } catch (err) {
+      status.textContent = err.message;
+    }
+
+    saveBtn.addEventListener("click", async () => {
+      status.textContent = "";
+      let parsed;
+      try {
+        parsed = textarea.value.trim() ? JSON.parse(textarea.value) : {};
+      } catch {
+        status.textContent = "Invalid JSON";
+        return;
+      }
+
+      try {
+        saveBtn.disabled = true;
+        await api(`/api/guild/${guildId}/settings`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ settings: parsed }),
+        });
+        status.textContent = "Settings saved.";
+      } catch (err) {
+        status.textContent = err.message;
+      } finally {
+        saveBtn.disabled = false;
+      }
+    });
+  }
+
+  async function loadModulesTab() {
+    const root = document.getElementById("modulesList");
+    root.innerHTML = "";
+
+    try {
+      const data = await api(`/api/guild/${guildId}/modules`);
+      const modules = data.availableModules || [];
+      const enabled = data.enabled || {};
+
+      modules.forEach((moduleName) => {
+        const card = makeToggleCard(
+          moduleName,
+          `Enable or disable the ${moduleName} module.`,
+          !!enabled[moduleName],
+          async (next, input) => {
+            input.disabled = true;
+            try {
+              await api(`/api/guild/${guildId}/modules`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ module: moduleName, enabled: next }),
+              });
+            } catch (err) {
+              input.checked = !next;
+              alert(err.message);
+            } finally {
+              input.disabled = false;
+            }
+          }
+        );
+        root.appendChild(card);
+      });
+
+      if (!modules.length) {
+        root.innerHTML = `<div class="text-sm text-zinc-600 dark:text-zinc-300">No modules available.</div>`;
+      }
+    } catch (err) {
+      root.innerHTML = `<div class="text-sm text-red-600">${err.message}</div>`;
+    }
+  }
+
+  async function loadCommandsTab() {
+    const root = document.getElementById("commandsList");
+    const search = document.getElementById("commandSearch");
+    root.innerHTML = "";
+
+    try {
+      const data = await api(`/api/guild/${guildId}/commands`);
+      const commands = data.availableCommands || [];
+      const enabled = data.enabled || {};
+
+      function render(filter = "") {
+        root.innerHTML = "";
+        const filtered = commands.filter((cmd) =>
+          cmd.toLowerCase().includes(filter.toLowerCase())
+        );
+
+        filtered.forEach((commandName) => {
+          const card = makeToggleCard(
+            commandName,
+            `Allow or block the ${commandName} command.`,
+            enabled[commandName] !== false,
+            async (next, input) => {
+              input.disabled = true;
+              try {
+                await api(`/api/guild/${guildId}/commands`, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ command: commandName, enabled: next }),
+                });
+                enabled[commandName] = next;
+              } catch (err) {
+                input.checked = !next;
+                alert(err.message);
+              } finally {
+                input.disabled = false;
+              }
+            }
+          );
+          root.appendChild(card);
+        });
+
+        if (!filtered.length) {
+          root.innerHTML = `<div class="text-sm text-zinc-600 dark:text-zinc-300">No matching commands.</div>`;
+        }
+      }
+
+      render();
+
+      search.addEventListener("input", () => {
+        render(search.value || "");
+      });
+    } catch (err) {
+      root.innerHTML = `<div class="text-sm text-red-600">${err.message}</div>`;
+    }
+  }
+
+  function automationCard(item, onDelete) {
+    const wrap = document.createElement("div");
+    wrap.className = "rounded-xl border border-zinc-200 p-4 dark:border-zinc-800";
+
+    const top = document.createElement("div");
+    top.className = "flex items-start justify-between gap-3";
+
+    const left = document.createElement("div");
+
+    const title = document.createElement("div");
+    title.className = "font-semibold";
+    title.textContent = item.name || "Untitled";
+
+    const meta = document.createElement("div");
+    meta.className = "mt-1 text-xs text-zinc-500 dark:text-zinc-400";
+    meta.textContent = `Schedule: ${item.schedule || "N/A"} • Action: ${item.action || "N/A"}`;
+
+    const params = document.createElement("pre");
+    params.className = "mt-3 overflow-auto rounded-lg bg-zinc-50 p-3 text-xs text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300";
+    params.textContent = JSON.stringify(item.params || {}, null, 2);
+
+    left.appendChild(title);
+    left.appendChild(meta);
+    left.appendChild(params);
+
+    const del = document.createElement("button");
+    del.className = "btn btn-ghost";
+    del.textContent = "Delete";
+    del.addEventListener("click", () => onDelete(item));
+
+    top.appendChild(left);
+    top.appendChild(del);
+    wrap.appendChild(top);
+    return wrap;
+  }
+
+  async function loadAutomationsTab() {
+    const list = document.getElementById("automationList");
+    const createBtn = document.getElementById("createAutomation");
+    const status = document.getElementById("automationStatus");
+    const nameEl = document.getElementById("automationName");
+    const scheduleEl = document.getElementById("automationSchedule");
+    const actionEl = document.getElementById("automationAction");
+    const paramsEl = document.getElementById("automationParams");
+
+    async function refreshList() {
+      list.innerHTML = "";
+      try {
+        const data = await api(`/api/guild/${guildId}/automations`);
+        const items = data.items || [];
+
+        items.forEach((item) => {
+          list.appendChild(
+            automationCard(item, async (target) => {
+              if (!confirm(`Delete automation "${target.name}"?`)) return;
+              try {
+                await api(`/api/guild/${guildId}/automations/${target._id}`, {
+                  method: "DELETE",
+                });
+                await refreshList();
+              } catch (err) {
+                alert(err.message);
+              }
+            })
+          );
+        });
+
+        if (!items.length) {
+          list.innerHTML = `<div class="text-sm text-zinc-600 dark:text-zinc-300">No automations created yet.</div>`;
+        }
+      } catch (err) {
+        list.innerHTML = `<div class="text-sm text-red-600">${err.message}</div>`;
+      }
+    }
+
+    createBtn.addEventListener("click", async () => {
+      status.textContent = "";
+
+      let params = {};
+      try {
+        params = paramsEl.value.trim() ? JSON.parse(paramsEl.value) : {};
+      } catch {
+        status.textContent = "Params must be valid JSON.";
+        return;
+      }
+
+      const payload = {
+        name: nameEl.value.trim(),
+        schedule: scheduleEl.value.trim(),
+        action: actionEl.value,
+        params,
+      };
+
+      if (!payload.name || !payload.schedule || !payload.action) {
+        status.textContent = "Name, schedule, and action are required.";
+        return;
+      }
+
+      try {
+        createBtn.disabled = true;
+        await api(`/api/guild/${guildId}/automations`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        nameEl.value = "";
+        scheduleEl.value = "";
+        actionEl.value = "send_message";
+        paramsEl.value = "";
+        status.textContent = "Automation created.";
+        await refreshList();
+      } catch (err) {
+        status.textContent = err.message;
+      } finally {
+        createBtn.disabled = false;
+      }
+    });
+
+    await refreshList();
+  }
+
+  if (currentTab === "settings") loadSettingsTab();
+  if (currentTab === "modules") loadModulesTab();
+  if (currentTab === "commands") loadCommandsTab();
+  if (currentTab === "automations") loadAutomationsTab();
+</script>

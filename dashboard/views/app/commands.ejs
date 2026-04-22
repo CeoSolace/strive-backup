@@ -1,0 +1,27 @@
+<% layout('layouts/app') -%>
+
+<div class="flex flex-col gap-6">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight">Commands</h1>
+    <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">Select a server below to configure commands.</p>
+  </div>
+  <% if (user?.displayedGuilds && user.displayedGuilds.length > 0) { %>
+  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <% user.displayedGuilds.forEach(function(g) { %>
+      <a class="action" href="/manage/<%= g.id %>?tab=commands">
+        <div class="flex items-center gap-3">
+          <img class="h-8 w-8 rounded-full" src="<%= g.iconURL %>" alt="" referrerpolicy="no-referrer" />
+          <div class="min-w-0">
+            <div class="truncate font-semibold"><%= g.name %></div>
+            <div class="action-sub">Configure commands</div>
+          </div>
+        </div>
+      </a>
+    <% }); %>
+  </div>
+  <% } else { %>
+  <div class="rounded-2xl border border-zinc-200 p-6 text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
+    You don't have any servers with Manage Guild permission.
+  </div>
+  <% } %>
+</div>

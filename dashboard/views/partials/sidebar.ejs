@@ -1,0 +1,90 @@
+<aside
+  id="sidebar"
+  class="group relative hidden w-72 shrink-0 border-r border-zinc-200/80 bg-white/85 backdrop-blur-xl supports-[backdrop-filter]:bg-white/75 dark:border-zinc-800 dark:bg-zinc-950/80 lg:block"
+>
+  <div class="flex h-full flex-col">
+    <!-- Brand -->
+    <div class="border-b border-zinc-200/80 px-5 py-5 dark:border-zinc-800">
+      <a href="/app/overview" class="flex items-center gap-3">
+        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-soft ring-1 ring-black/5">
+          <span class="text-lg font-bold">B</span>
+        </div>
+
+        <div class="min-w-0">
+          <div class="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+            Bright Bot
+          </div>
+          <div class="truncate text-xs text-zinc-500 dark:text-zinc-400">
+            Bot control dashboard
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="flex-1 overflow-y-auto px-3 py-4">
+      <div class="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+        Workspace
+      </div>
+
+      <%- include('./sidebar-item', { href: '/app/overview', label: 'Overview', icon: 'home', activePath }) %>
+      <%- include('./sidebar-item', { href: '/app/servers', label: 'Servers', icon: 'server', activePath }) %>
+      <%- include('./sidebar-item', { href: '/app/modules', label: 'Modules', icon: 'puzzle', activePath }) %>
+      <%- include('./sidebar-item', { href: '/app/commands', label: 'Commands', icon: 'terminal', activePath }) %>
+      <%- include('./sidebar-item', { href: '/app/automations', label: 'Automations', icon: 'zap', activePath }) %>
+      <%- include('./sidebar-item', { href: '/app/logs', label: 'Logs', icon: 'scroll', activePath }) %>
+      <%- include('./sidebar-item', { href: '/app/analytics', label: 'Analytics', icon: 'chart', activePath }) %>
+
+      <div class="mt-5 mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+        Account
+      </div>
+
+      <%- include('./sidebar-item', { href: '/app/account/profile', label: 'Account', icon: 'user', activePath }) %>
+
+      <div class="mt-5 mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+        System
+      </div>
+
+      <%- include('./sidebar-item', { href: '/app/settings', label: 'Settings', icon: 'settings', activePath }) %>
+      <%- include('./sidebar-item', { href: '/app/billing', label: 'Billing', icon: 'creditcard', activePath }) %>
+      <%- include('./sidebar-item', { href: '/news', label: 'News', icon: 'news', activePath }) %>
+
+      <!-- Support Card -->
+      <div class="mt-6 px-3">
+        <div class="rounded-2xl border border-brand-100 bg-brand-50 p-4 dark:border-brand-900/40 dark:bg-brand-950/30">
+          <div class="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+            Need help?
+          </div>
+          <p class="mt-1 text-xs leading-5 text-zinc-600 dark:text-zinc-400">
+            Join support, manage servers faster, and keep your bot setup running smoothly.
+          </p>
+
+          <div class="mt-3 flex gap-2">
+            <a
+              href="/news"
+              class="inline-flex items-center rounded-xl bg-white px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm ring-1 ring-zinc-200 transition hover:bg-zinc-50 dark:bg-zinc-900 dark:text-zinc-50 dark:ring-zinc-800 dark:hover:bg-zinc-800"
+            >
+              Updates
+            </a>
+            <a
+              href="/app/servers"
+              class="inline-flex items-center rounded-xl bg-brand-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-brand-700"
+            >
+              Manage
+            </a>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Footer -->
+    <div class="border-t border-zinc-200/80 px-5 py-4 dark:border-zinc-800">
+      <div class="flex items-center justify-between gap-3 text-xs text-zinc-500 dark:text-zinc-400">
+        <span class="truncate">Bright Bot Dashboard</span>
+        <span class="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium dark:bg-zinc-900">
+          v1
+        </span>
+      </div>
+    </div>
+  </div>
+</aside>

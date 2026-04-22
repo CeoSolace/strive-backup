@@ -1,0 +1,47 @@
+<% layout('layouts/app') -%>
+
+<section class="mx-auto max-w-4xl p-6">
+  <h1 class="mb-4 text-3xl font-bold">Settings</h1>
+
+  <div class="grid gap-4">
+    <a
+      href="/app/account/profile"
+      class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm transition hover:border-brand-300 hover:shadow dark:border-zinc-800 dark:bg-zinc-900"
+    >
+      <div class="text-lg font-semibold">Account Preferences</div>
+      <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+        Manage your default guild and export preferences.
+      </p>
+    </a>
+
+    <a
+      href="/app/privacy-consent"
+      class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm transition hover:border-brand-300 hover:shadow dark:border-zinc-800 dark:bg-zinc-900"
+    >
+      <div class="text-lg font-semibold">Privacy & Consent</div>
+      <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+        Review and update your privacy choices.
+      </p>
+    </a>
+
+    <a
+      href="/app/account/security"
+      class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm transition hover:border-brand-300 hover:shadow dark:border-zinc-800 dark:bg-zinc-900"
+    >
+      <div class="text-lg font-semibold">Account Security</div>
+      <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+        Sign out everywhere and manage session security.
+      </p>
+    </a>
+
+    <a
+      href="/app/billing"
+      class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm transition hover:border-brand-300 hover:shadow dark:border-zinc-800 dark:bg-zinc-900"
+    >
+      <div class="text-lg font-semibold">Billing</div>
+      <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+        Check your current plan and billing status.
+      </p>
+    </a>
+  </div>
+</section>

@@ -1,0 +1,56 @@
+<%/*
+  Privacy & Consent settings page.
+  Expects `preferences` object containing boolean flags for analytics, diagnostics, training, marketing.
+*/%>
+<%- include('../layouts/app', { pageTitle: 'Privacy & Consent' }) %>
+<section class="max-w-4xl mx-auto p-6">
+  <h1 class="text-3xl font-bold mb-4">Privacy & Consent</h1>
+  <p class="mb-6">Control how your data is used. Toggle your consent for each category below. Your changes will be saved automatically.</p>
+  <form id="consent-form">
+    <div class="space-y-4">
+      <% const categories = [
+        { key: 'analytics', label: 'Analytics', description: 'Allow us to collect usage data to improve the dashboard experience.' },
+        { key: 'diagnostics', label: 'Diagnostics', description: 'Permit diagnostic data to help us identify and fix issues.' },
+        { key: 'training', label: 'AI Training', description: 'Help improve our AI models by allowing anonymised data to be used for training.' },
+        { key: 'marketing', label: 'Marketing', description: 'Receive updates and promotional material about new features.' },
+      ]; %>
+      <% categories.forEach(cat => { %>
+        <div class="flex items-start bg-white dark:bg-gray-800 p-4 rounded shadow">
+          <div class="flex-grow">
+            <h2 class="text-lg font-semibold"><%= cat.label %></h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400"><%= cat.description %></p>
+          </div>
+          <div class="ml-4 flex items-center">
+            <label class="inline-flex relative items-center cursor-pointer">
+              <input type="checkbox" id="<%= cat.key %>" class="sr-only" <%= preferences[cat.key] ? 'checked' : '' %> />
+              <div class="w-11 h-6 bg-gray-200 dark:bg-gray-700 rounded-full peer peer-focus:ring-4 peer-focus:ring-indigo-300 dark:peer-focus:ring-indigo-800 peer-checked:bg-indigo-600"></div>
+              <span class="ml-3 text-sm"></span>
+            </label>
+          </div>
+        </div>
+      <% }); %>
+    </div>
+    <button type="submit" class="btn mt-6">Save Preferences</button>
+  </form>
+  <script>
+    document.getElementById('consent-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const body = {
+        analytics: document.getElementById('analytics').checked,
+        diagnostics: document.getElementById('diagnostics').checked,
+        training: document.getElementById('training').checked,
+        marketing: document.getElementById('marketing').checked,
+      };
+      const res = await fetch('/api/user/preferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        alert('Privacy preferences updated');
+      } else {
+        alert('Failed to update preferences');
+      }
+    });
+  </script>
+</section>

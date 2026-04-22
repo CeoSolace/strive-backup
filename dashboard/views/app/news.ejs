@@ -1,0 +1,198 @@
+<% layout('layouts/app') -%>
+
+<section class="mx-auto max-w-6xl p-6">
+  <div class="mb-6 flex items-center justify-between gap-4">
+    <div>
+      <h1 class="text-3xl font-bold">News</h1>
+      <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+        Latest updates from the dashboard.
+      </p>
+    </div>
+
+    <% if (typeof isAdmin !== "undefined" && isAdmin) { %>
+      <button id="create-news-btn" class="btn btn-secondary">New Post</button>
+    <% } %>
+  </div>
+
+  <div class="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
+    <strong>Milestone Reached:</strong> We’ve officially fully finished the bot dashboard, with the only remaining work being on-site analytics.
+  </div>
+
+  <div id="news-status" class="mb-4 text-sm text-zinc-500 dark:text-zinc-400"></div>
+  <div id="news-list" class="space-y-6"></div>
+
+  <script>
+    async function getCsrfToken() {
+      const res = await fetch("/api/csrf", { credentials: "same-origin" });
+      const data = await res.json();
+      return data.csrfToken;
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function renderNews(posts) {
+      const root = document.getElementById("news-list");
+
+      if (!posts || !posts.length) {
+        root.innerHTML = `
+          <div class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <p class="text-zinc-600 dark:text-zinc-300">No news available.</p>
+          </div>
+        `;
+        return;
+      }
+
+      root.innerHTML = posts.map((post) => {
+        const createdAt = post.createdAt
+          ? new Date(post.createdAt).toLocaleDateString()
+          : "Unknown date";
+
+        return `
+          <article class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <div class="flex items-start justify-between gap-4">
+              <div class="min-w-0">
+                <h2 class="mb-2 text-2xl font-semibold">${escapeHtml(post.title || "Untitled")}</h2>
+                <p class="mb-4 text-sm text-zinc-500">${escapeHtml(createdAt)}</p>
+              </div>
+              <% if (typeof isAdmin !== "undefined" && isAdmin) { %>
+                <div class="flex gap-2">
+                  <button class="btn btn-ghost edit-news-btn" data-id="${post._id}" data-title="${escapeHtml(post.title || "")}" data-content="${escapeHtml(post.content || "")}">Edit</button>
+                  <button class="btn btn-ghost delete-news-btn" data-id="${post._id}">Delete</button>
+                </div>
+              <% } %>
+            </div>
+            <div class="prose prose-indigo max-w-none dark:prose-invert whitespace-pre-wrap">${escapeHtml(post.content || "")}</div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    async function loadNews() {
+      const statusEl = document.getElementById("news-status");
+
+      try {
+        const res = await fetch("/api/news", {
+          credentials: "same-origin",
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          statusEl.textContent = data?.error || "Failed to load news.";
+          return;
+        }
+
+        renderNews(data?.posts || []);
+        bindNewsActions();
+      } catch (err) {
+        statusEl.textContent = "Failed to load news.";
+      }
+    }
+
+    async function createNews() {
+      const title = prompt("Post title:");
+      if (!title) return;
+
+      const content = prompt("Post content:");
+      if (!content) return;
+
+      const csrfToken = await getCsrfToken();
+
+      const res = await fetch("/api/news", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
+        body: JSON.stringify({ title, content }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data?.error || "Failed to create post.");
+        return;
+      }
+
+      await loadNews();
+    }
+
+    async function editNews(id, currentTitle, currentContent) {
+      const title = prompt("Edit title:", currentTitle || "");
+      if (title === null) return;
+
+      const content = prompt("Edit content:", currentContent || "");
+      if (content === null) return;
+
+      const csrfToken = await getCsrfToken();
+
+      const res = await fetch(`/api/news/${id}`, {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
+        body: JSON.stringify({ title, content }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data?.error || "Failed to update post.");
+        return;
+      }
+
+      await loadNews();
+    }
+
+    async function deleteNews(id) {
+      if (!confirm("Delete this post?")) return;
+
+      const csrfToken = await getCsrfToken();
+
+      const res = await fetch(`/api/news/${id}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+        headers: {
+          "X-CSRF-Token": csrfToken,
+        },
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data?.error || "Failed to delete post.");
+        return;
+      }
+
+      await loadNews();
+    }
+
+    function bindNewsActions() {
+      const createBtn = document.getElementById("create-news-btn");
+      if (createBtn) {
+        createBtn.onclick = createNews;
+      }
+
+      document.querySelectorAll(".edit-news-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          editNews(btn.dataset.id, btn.dataset.title || "", btn.dataset.content || "");
+        });
+      });
+
+      document.querySelectorAll(".delete-news-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          deleteNews(btn.dataset.id);
+        });
+      });
+    }
+
+    loadNews();
+  </script>
+</section>

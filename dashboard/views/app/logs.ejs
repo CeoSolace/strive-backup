@@ -1,0 +1,118 @@
+<% layout('layouts/app') -%>
+
+<section class="mx-auto max-w-6xl p-6">
+  <div class="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+      <h1 class="text-3xl font-bold">Audit Logs</h1>
+      <p class="text-sm text-zinc-600 dark:text-zinc-300">
+        View actions performed across your servers.
+      </p>
+    </div>
+
+    <select
+      id="guild-filter"
+      class="w-full max-w-xs rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+    >
+      <option value="">All servers</option>
+      <% (guilds || []).forEach(g => { %>
+        <option value="<%= g.id %>"><%= g.name %></option>
+      <% }) %>
+    </select>
+  </div>
+
+  <div id="logs-status" class="mb-4 text-sm text-zinc-500 dark:text-zinc-400"></div>
+
+  <div class="overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800">
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-zinc-100 dark:bg-zinc-800 text-left">
+          <tr>
+            <th class="px-4 py-3 font-semibold">Guild</th>
+            <th class="px-4 py-3 font-semibold">Action</th>
+            <th class="px-4 py-3 font-semibold">Details</th>
+            <th class="px-4 py-3 font-semibold">Date</th>
+          </tr>
+        </thead>
+        <tbody id="logs-table" class="divide-y divide-zinc-200 dark:divide-zinc-800">
+          <!-- filled by JS -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<script>
+  function escapeHtml(str) {
+    return String(str || "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;");
+  }
+
+  function renderLogs(logs) {
+    const table = document.getElementById("logs-table");
+
+    if (!logs.length) {
+      table.innerHTML = `
+        <tr>
+          <td colspan="4" class="px-4 py-6 text-center text-zinc-500">
+            No logs found.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    table.innerHTML = logs.map(log => {
+      const date = log.createdAt
+        ? new Date(log.createdAt).toLocaleString()
+        : "Unknown";
+
+      return `
+        <tr class="hover:bg-zinc-50 dark:hover:bg-zinc-900">
+          <td class="px-4 py-3">${escapeHtml(log.guildId)}</td>
+          <td class="px-4 py-3 font-medium">${escapeHtml(log.action)}</td>
+          <td class="px-4 py-3 text-zinc-600 dark:text-zinc-300">
+            ${escapeHtml(log.details)}
+          </td>
+          <td class="px-4 py-3 text-xs text-zinc-500">
+            ${escapeHtml(date)}
+          </td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  async function loadLogs() {
+    const status = document.getElementById("logs-status");
+    const guildId = document.getElementById("guild-filter").value;
+
+    status.textContent = "Loading...";
+
+    try {
+      const url = guildId
+        ? `/api/logs?guildId=${guildId}`
+        : `/api/logs`;
+
+      const res = await fetch(url, {
+        credentials: "same-origin",
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        status.textContent = data?.error || "Failed to load logs.";
+        return;
+      }
+
+      renderLogs(data.logs || []);
+      status.textContent = "";
+    } catch (err) {
+      status.textContent = "Failed to load logs.";
+    }
+  }
+
+  document.getElementById("guild-filter").addEventListener("change", loadLogs);
+
+  loadLogs();
+</script>

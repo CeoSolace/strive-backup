@@ -1,0 +1,113 @@
+<% layout('layouts/app') -%>
+
+<%
+  const safeUser = typeof user !== "undefined" && user ? user : null;
+  const safeGuilds = safeUser && Array.isArray(safeUser.guilds) ? safeUser.guilds.filter(g => g.admin) : [];
+%>
+
+<section class="mx-auto max-w-4xl p-6">
+  <h1 class="mb-4 text-3xl font-bold">Account Profile</h1>
+
+  <div class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <p class="mb-4 text-zinc-800 dark:text-zinc-200">
+      <strong>User:</strong>
+      <%= safeUser?.username || "Unknown User" %>
+      <% if (safeUser?.id) { %>
+        (<%= safeUser.id %>)
+      <% } %>
+    </p>
+
+    <form id="profile-form" class="space-y-4">
+      <div>
+        <label class="mb-1 block font-medium" for="defaultGuild">Default Guild</label>
+        <select
+          id="defaultGuild"
+          name="defaultGuild"
+          class="w-full rounded-xl border border-zinc-300 bg-white p-2 text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+        >
+          <option value="">None</option>
+          <% safeGuilds.forEach((g) => { %>
+            <option value="<%= g.id %>"><%= g.name %></option>
+          <% }) %>
+        </select>
+      </div>
+
+      <div>
+        <label class="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="emailExport"
+            name="emailExport"
+            class="h-4 w-4 rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-700"
+          />
+          <span>Send me account export via email when requested</span>
+        </label>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <button type="submit" class="btn btn-secondary">Save Preferences</button>
+        <span id="profile-status" class="text-sm text-zinc-600 dark:text-zinc-300"></span>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    async function getCsrfToken() {
+      const res = await fetch("/api/csrf", { credentials: "same-origin" });
+      const data = await res.json();
+      return data.csrfToken;
+    }
+
+    async function loadPreferences() {
+      try {
+        const res = await fetch("/api/user/preferences", {
+          credentials: "same-origin",
+        });
+
+        const data = await res.json();
+        const prefs = data?.preferences || {};
+
+        document.getElementById("defaultGuild").value = prefs.defaultGuild || "";
+        document.getElementById("emailExport").checked = !!prefs.emailExport;
+      } catch (err) {
+        document.getElementById("profile-status").textContent = "Failed to load preferences.";
+      }
+    }
+
+    document.getElementById("profile-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const status = document.getElementById("profile-status");
+      status.textContent = "";
+
+      try {
+        const csrfToken = await getCsrfToken();
+
+        const res = await fetch("/api/user/preferences", {
+          method: "PUT",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": csrfToken,
+          },
+          body: JSON.stringify({
+            defaultGuild: document.getElementById("defaultGuild").value || null,
+            emailExport: document.getElementById("emailExport").checked,
+          }),
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (res.ok) {
+          status.textContent = "Preferences updated.";
+        } else {
+          status.textContent = data?.error || "Failed to update preferences.";
+        }
+      } catch (err) {
+        status.textContent = "Failed to update preferences.";
+      }
+    });
+
+    loadPreferences();
+  </script>
+</section>
