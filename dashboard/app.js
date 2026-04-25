@@ -108,18 +108,28 @@ module.exports.launch = async (client) => {
 
   app.use("/api", discordAuthRouter);
 
+  // CSRF token endpoint must run through csurf first so req.csrfToken exists.
+  // GET is safe and does not require an incoming token, but it creates one for later POST/PUT/DELETE requests.
+  app.get("/api/csrf", csrfProtection, (req, res) => {
+    return res.json({ csrfToken: req.csrfToken() });
+  });
+
   app.use("/api", (req, res, next) => {
+    if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return next();
     if (req.path.startsWith("/login") || req.path.startsWith("/auth/callback")) return next();
     return csrfProtection(req, res, next);
   });
 
-  app.use("/api", (req, res, next) => {
-    res.setHeader("X-CSRF-Token", req.csrfToken ? req.csrfToken() : "");
-    return next();
-  });
-
   app.use("/api", automationBuilderRouter);
   app.use("/api", apiRouter);
+
+  // Return JSON for CSRF errors instead of crashing through the HTML error pages/log spam.
+  app.use("/api", (err, req, res, next) => {
+    if (err.code === "EBADCSRFTOKEN") {
+      return res.status(403).json({ error: "Invalid CSRF token. Refresh the page and try again." });
+    }
+    return next(err);
+  });
 
   if (logoutRouter) app.use("/logout", logoutRouter);
   if (guildManagerRouter) app.use("/manage", guildManagerRouter);
