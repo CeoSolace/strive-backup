@@ -21,7 +21,6 @@ const COLORS = {
 };
 
 const BLOCKS = [
-  // Triggers
   { id: "message_contains", name: "When Message Contains", type: "trigger", color: COLORS.trigger, fields: [{ key: "text", label: "Message contains" }] },
   { id: "message_equals", name: "When Message Equals", type: "trigger", color: COLORS.trigger, fields: [{ key: "text", label: "Message equals" }] },
   { id: "message_starts", name: "When Message Starts With", type: "trigger", color: COLORS.trigger, fields: [{ key: "text", label: "Starts with" }] },
@@ -36,7 +35,6 @@ const BLOCKS = [
   { id: "channel_created", name: "When Channel Created", type: "trigger", color: COLORS.trigger, fields: [] },
   { id: "channel_deleted", name: "When Channel Deleted", type: "trigger", color: COLORS.trigger, fields: [] },
 
-  // Messages
   { id: "send_message", name: "Send Message", type: "message", color: COLORS.message, fields: [{ key: "channel", label: "Channel ID" }, { key: "message", label: "Message", type: "textarea" }] },
   { id: "reply_message", name: "Reply To Trigger Message", type: "message", color: COLORS.message, fields: [{ key: "message", label: "Reply text", type: "textarea" }] },
   { id: "dm_user", name: "DM User", type: "message", color: COLORS.message, fields: [{ key: "message", label: "DM message", type: "textarea" }] },
@@ -49,13 +47,11 @@ const BLOCKS = [
   { id: "crosspost_message", name: "Publish Announcement Message", type: "message", color: COLORS.message, fields: [{ key: "channel", label: "Announcement Channel ID" }, { key: "messageId", label: "Message ID" }] },
   { id: "send_webhook", name: "Send Webhook", type: "message", color: COLORS.message, fields: [{ key: "url", label: "Webhook URL" }, { key: "message", label: "Message", type: "textarea" }] },
 
-  // Pings
   { id: "ping_user", name: "Ping User", type: "ping", color: COLORS.ping, fields: [{ key: "channel", label: "Channel ID" }, { key: "user", label: "User ID" }, { key: "message", label: "Message", type: "textarea" }] },
   { id: "ping_role", name: "Ping Role", type: "ping", color: COLORS.ping, fields: [{ key: "channel", label: "Channel ID" }, { key: "role", label: "Role ID" }, { key: "message", label: "Message", type: "textarea" }] },
   { id: "ping_everyone", name: "Ping Everyone", type: "ping", color: COLORS.ping, fields: [{ key: "channel", label: "Channel ID" }, { key: "message", label: "Message", type: "textarea" }] },
   { id: "silent_ping_role", name: "Silent Role Mention", type: "ping", color: COLORS.ping, fields: [{ key: "channel", label: "Channel ID" }, { key: "role", label: "Role ID" }, { key: "message", label: "Message", type: "textarea" }] },
 
-  // Roles
   { id: "add_role", name: "Add Role", type: "role", color: COLORS.role, fields: [{ key: "role", label: "Role ID" }] },
   { id: "remove_role", name: "Remove Role", type: "role", color: COLORS.role, fields: [{ key: "role", label: "Role ID" }] },
   { id: "toggle_role", name: "Toggle Role", type: "role", color: COLORS.role, fields: [{ key: "role", label: "Role ID" }] },
@@ -65,7 +61,6 @@ const BLOCKS = [
   { id: "set_role_color", name: "Set Role Color", type: "role", color: COLORS.role, fields: [{ key: "role", label: "Role ID" }, { key: "color", label: "Hex color" }] },
   { id: "move_role", name: "Move Role Position", type: "role", color: COLORS.role, fields: [{ key: "role", label: "Role ID" }, { key: "position", label: "Position", type: "number" }] },
 
-  // Channels
   { id: "create_text_channel", name: "Create Text Channel", type: "channel", color: COLORS.channel, fields: [{ key: "name", label: "Channel name" }, { key: "category", label: "Category ID optional" }] },
   { id: "create_voice_channel", name: "Create Voice Channel", type: "channel", color: COLORS.channel, fields: [{ key: "name", label: "Channel name" }, { key: "category", label: "Category ID optional" }, { key: "limit", label: "User limit", type: "number" }] },
   { id: "create_announcement_channel", name: "Create Announcement Channel", type: "channel", color: COLORS.channel, fields: [{ key: "name", label: "Channel name" }, { key: "category", label: "Category ID optional" }] },
@@ -80,7 +75,6 @@ const BLOCKS = [
   { id: "slowmode", name: "Set Slowmode", type: "channel", color: COLORS.channel, fields: [{ key: "channel", label: "Channel ID" }, { key: "seconds", label: "Seconds", type: "number" }] },
   { id: "clone_channel", name: "Clone Channel", type: "channel", color: COLORS.channel, fields: [{ key: "channel", label: "Channel ID" }, { key: "name", label: "New channel name optional" }] },
 
-  // Categories
   { id: "create_category", name: "Create Category", type: "category", color: COLORS.category, fields: [{ key: "name", label: "Category name" }] },
   { id: "delete_category", name: "Delete Category", type: "category", color: COLORS.category, fields: [{ key: "category", label: "Category ID" }] },
   { id: "rename_category", name: "Rename Category", type: "category", color: COLORS.category, fields: [{ key: "category", label: "Category ID" }, { key: "name", label: "New name" }] },
@@ -89,12 +83,10 @@ const BLOCKS = [
   { id: "hide_category", name: "Hide Category", type: "category", color: COLORS.category, fields: [{ key: "category", label: "Category ID" }] },
   { id: "show_category", name: "Show Category", type: "category", color: COLORS.category, fields: [{ key: "category", label: "Category ID" }] },
 
-  // Threads and invites
   { id: "create_thread", name: "Create Thread", type: "thread", color: COLORS.thread, fields: [{ key: "channel", label: "Channel ID" }, { key: "name", label: "Thread name" }] },
   { id: "archive_thread", name: "Archive Thread", type: "thread", color: COLORS.thread, fields: [{ key: "thread", label: "Thread ID" }] },
   { id: "create_invite", name: "Create Invite", type: "invite", color: COLORS.invite, fields: [{ key: "channel", label: "Channel ID" }, { key: "maxAge", label: "Max age seconds", type: "number" }, { key: "maxUses", label: "Max uses", type: "number" }] },
 
-  // Moderation / member
   { id: "set_nickname", name: "Set Nickname", type: "moderation", color: COLORS.moderation, fields: [{ key: "nickname", label: "Nickname" }] },
   { id: "timeout_user", name: "Timeout User", type: "moderation", color: COLORS.moderation, fields: [{ key: "minutes", label: "Minutes", type: "number" }, { key: "reason", label: "Reason" }] },
   { id: "remove_timeout", name: "Remove Timeout", type: "moderation", color: COLORS.moderation, fields: [{ key: "reason", label: "Reason" }] },
@@ -104,7 +96,6 @@ const BLOCKS = [
   { id: "warn_user", name: "Warn User", type: "moderation", color: COLORS.moderation, fields: [{ key: "reason", label: "Reason" }] },
   { id: "purge_messages", name: "Purge Messages", type: "moderation", color: COLORS.moderation, fields: [{ key: "channel", label: "Channel ID" }, { key: "amount", label: "Amount", type: "number" }] },
 
-  // Conditions
   { id: "if_role", name: "If User Has Role", type: "condition", color: COLORS.condition, fields: [{ key: "role", label: "Role ID" }] },
   { id: "if_no_role", name: "If User Does Not Have Role", type: "condition", color: COLORS.condition, fields: [{ key: "role", label: "Role ID" }] },
   { id: "if_channel", name: "If In Channel", type: "condition", color: COLORS.condition, fields: [{ key: "channel", label: "Channel ID" }] },
@@ -116,7 +107,6 @@ const BLOCKS = [
   { id: "if_bot", name: "If User Is Bot", type: "condition", color: COLORS.condition, fields: [] },
   { id: "if_not_bot", name: "If User Is Not Bot", type: "condition", color: COLORS.condition, fields: [] },
 
-  // Utility / Data
   { id: "wait", name: "Wait", type: "utility", color: COLORS.utility, fields: [{ key: "seconds", label: "Seconds", type: "number" }] },
   { id: "cooldown", name: "Cooldown", type: "utility", color: COLORS.utility, fields: [{ key: "seconds", label: "Seconds", type: "number" }] },
   { id: "stop_flow", name: "Stop Flow", type: "utility", color: COLORS.utility, fields: [] },
@@ -151,7 +141,6 @@ function createNode(def) {
 
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   node.dataset.id = id;
-
   node.innerHTML = `<div class="node-header" style="background:${def.color}">${def.name}<button class="node-remove">✕</button></div><div class="node-body"></div><div class="node-port in"></div><div class="node-port out"></div>`;
 
   const body = node.querySelector(".node-body");
@@ -179,7 +168,6 @@ function createNode(def) {
 
   enableDrag(node);
   enablePorts(node);
-
   canvas.appendChild(node);
   nodes.push({ id, def, params, el: node });
 }
@@ -237,8 +225,32 @@ function renderConnections() {
   });
 }
 
+function closeTutorial() {
+  tutorial.classList.add("hidden");
+  try { localStorage.setItem("brightFeatureBuilderTutorialClosed", "true"); } catch {}
+}
+
 function startTutorial() {
-  tutorial.innerHTML = `<h3>Tutorial</h3><p>Search for message, role, channel, category, ping, condition, or moderation blocks. Add them, connect them, then save the feature.</p>`;
+  let closed = false;
+  try { closed = localStorage.getItem("brightFeatureBuilderTutorialClosed") === "true"; } catch {}
+  if (closed) {
+    tutorial.classList.add("hidden");
+    return;
+  }
+
+  tutorial.classList.remove("hidden");
+  tutorial.innerHTML = `
+    <div class="tutorial-head">
+      <h3>Tutorial</h3>
+      <button type="button" class="tutorial-close" aria-label="Close tutorial">✕</button>
+    </div>
+    <p>Search for message, role, channel, category, ping, condition, or moderation blocks. Add them, connect them, then save the feature.</p>
+    <div class="tutorial-actions">
+      <button type="button" class="builder-btn muted tutorial-dismiss">Got it</button>
+    </div>
+  `;
+  tutorial.querySelector(".tutorial-close")?.addEventListener("click", closeTutorial);
+  tutorial.querySelector(".tutorial-dismiss")?.addEventListener("click", closeTutorial);
 }
 
 saveBtn.onclick = async () => {
