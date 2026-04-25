@@ -1,9 +1,10 @@
 // dashboard/models/Automation.js
 const mongoose = require("mongoose");
 
-// Ultra-compact automations:
-// - f: function ID sequence (ints 1..18), max 9 items
-// - p: tiny param objects aligned by index with f (short keys: c,r,t,x,s,k,e,b)
+// Bright Feature Builder automations
+// f = ordered block IDs, stored as strings so the builder can grow without numeric limits
+// p = parameter objects aligned with f by index
+// c = optional visual connections between node IDs for flow UI
 
 const AutomationSchema = new mongoose.Schema(
   {
@@ -11,11 +12,9 @@ const AutomationSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true },
     enabled: { type: Boolean, default: true },
 
-    // Function sequence: array of Numbers (1..18), length 1..9
-    f: { type: [Number], default: [], required: true },
-
-    // Params aligned with f index; Mixed to allow tiny objects (short keys).
+    f: { type: [String], default: [], required: true },
     p: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    c: { type: [mongoose.Schema.Types.Mixed], default: [] },
   },
   { timestamps: true, collection: "automations" }
 );
