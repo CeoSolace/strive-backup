@@ -14,9 +14,11 @@ function load() {
     if (!fs.existsSync(filePath)) return;
     const data = JSON.parse(fs.readFileSync(filePath, "utf8"));
     paused.clear();
+
     for (const [guildId, value] of Object.entries(data.paused || {})) {
       if (!value.expiresAt || Date.now() < value.expiresAt) paused.set(guildId, value);
     }
+
     save();
   } catch {
     // ignore corrupted local state
@@ -58,11 +60,23 @@ function resume(guildId) {
   return existed;
 }
 
-load();
+function guardStateModule(client) {
+  load();
+  client.guardState = api;
+  client.logger?.success?.("GuardState loaded");
+}
 
-module.exports = {
+const api = {
   isPaused,
   getPause,
   pause,
   resume,
+  load,
+  save,
 };
+
+Object.assign(guardStateModule, api);
+
+load();
+
+module.exports = guardStateModule;
