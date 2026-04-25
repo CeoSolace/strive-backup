@@ -10,7 +10,6 @@ module.exports.launch = async (client) => {
   const session = require("express-session");
   const MongoStore = require("connect-mongo");
 
-  const helmet = require("helmet");
   const rateLimit = require("express-rate-limit");
   const cookieParser = require("cookie-parser");
   const csrf = require("csurf");
@@ -39,7 +38,14 @@ module.exports.launch = async (client) => {
 
   app.set("trust proxy", 1);
 
-  app.use("/api", rateLimit({ windowMs: 60000, max: 120 }));
+  app.use("/api", rateLimit({
+    windowMs: 60 * 1000,
+    max: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Rate limit exceeded" },
+    skip: (req) => req.path.startsWith("/login") || req.path.startsWith("/auth/callback"),
+  }));
 
   try {
     const ejsMate = require("ejs-mate");
@@ -52,29 +58,87 @@ module.exports.launch = async (client) => {
     .use(cookieParser())
     .engine("html", require("ejs").renderFile)
     .set("view engine", "ejs")
-    .use(express.static(path.join(__dirname, "/public")))
+    .use(express.static(path.join(__dirname, "/public"), { maxAge: "1h" }))
     .set("views", path.join(__dirname, "/views"))
-    .use(session({ secret: "CHANGE_ME", resave: false, saveUninitialized: false }))
+    .use(session({
+      secret: process.env.SESSION_PASSWORD || "CHANGE_ME_SESSION_PASSWORD",
+      cookie: {
+        maxAge: 336 * 60 * 60 * 1000,
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+      },
+      name: "djs_connection_cookie",
+      resave: false,
+      saveUninitialized: false,
+      store: MongoStore.create({
+        client: db.getClient(),
+        dbName: db.name,
+        collectionName: "sessions",
+        stringify: false,
+        autoRemove: "interval",
+        autoRemoveInterval: 10,
+      }),
+    }))
     .use(async (req, res, next) => {
       req.user = req.session.user;
       req.client = client;
       next();
     });
 
-  const csrfProtection = csrf();
+  app.use(async (req, res, next) => {
+    res.locals.baseURL = client.config.DASHBOARD.baseURL;
+    res.locals.currentURL = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
+    res.locals.brand = { name: "Bright", byline: "built by TheCeoTyro" };
+
+    if (req.user && req.url !== "/") {
+      try {
+        req.userInfos = await utils.fetchUser(req.user, req.client);
+      } catch {
+        req.userInfos = null;
+      }
+    }
+
+    next();
+  });
+
+  const csrfProtection = csrf({ cookie: false });
+
+  if (healthRouter) app.get("/health", healthRouter(client, db));
 
   app.use("/api", discordAuthRouter);
 
-  app.use("/api", csrfProtection, automationBuilderRouter);
-  app.use("/api", csrfProtection, apiRouter);
+  app.use("/api", (req, res, next) => {
+    if (req.path.startsWith("/login") || req.path.startsWith("/auth/callback")) return next();
+    return csrfProtection(req, res, next);
+  });
+
+  app.use("/api", (req, res, next) => {
+    res.setHeader("X-CSRF-Token", req.csrfToken ? req.csrfToken() : "");
+    return next();
+  });
+
+  app.use("/api", automationBuilderRouter);
+  app.use("/api", apiRouter);
 
   if (logoutRouter) app.use("/logout", logoutRouter);
   if (guildManagerRouter) app.use("/manage", guildManagerRouter);
+  if (newsRouter) app.use("/news", newsRouter);
 
   app.use("/app", CheckAuth, appPagesRouter);
   app.use("/", mainRouter);
 
-  app.listen(port, () => {
-    client.logger.success(`Dashboard running on ${port}`);
+  app.use(CheckAuth, (req, res) => {
+    res.status(404).render("404", { user: req.userInfos });
+  });
+
+  app.use(CheckAuth, (err, req, res, next) => {
+    console.error(err.stack);
+    if (!req.user) return res.redirect("/");
+    res.status(500).render("500", { user: req.userInfos });
+  });
+
+  app.listen(port, "0.0.0.0", () => {
+    client.logger.success(`Dashboard is listening on port ${port}`);
   });
 };
