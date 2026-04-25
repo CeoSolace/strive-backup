@@ -1,126 +1,30 @@
 <% layout('layouts/app') -%>
 
-<div class="flex flex-col gap-6">
-  <h1 class="text-2xl font-semibold">Feature Builder</h1>
+<div class="bright-builder-shell">
 
-  <div class="grid gap-6 xl:grid-cols-4">
+  <aside class="builder-sidebar">
+    <h2>Blocks</h2>
+    <input class="block-search" placeholder="Search..." />
+    <div id="blockLibrary"></div>
+  </aside>
 
-    <!-- BLOCK LIBRARY -->
-    <div class="card">
-      <h2 class="font-semibold">Blocks</h2>
-      <div id="blockLibrary"></div>
+  <div class="builder-workspace">
+
+    <div class="builder-topbar">
+      <div>Feature Builder</div>
+      <button id="saveFeatureBtn" class="builder-btn">Save</button>
     </div>
 
-    <!-- BUILDER -->
-    <div class="card xl:col-span-2">
-      <h2 class="font-semibold">Build</h2>
+    <div id="builderCanvas" class="builder-canvas"></div>
 
-      <input id="automationName" placeholder="Feature name" class="input" />
-
-      <div id="canvas" style="min-height:300px;border:1px dashed #555;padding:10px;"></div>
-
-      <button id="save" class="btn">Save</button>
-    </div>
-
-    <!-- SAVED -->
-    <div class="card">
-      <h2 class="font-semibold">Saved</h2>
-      <div id="list"></div>
+    <div id="tutorialBox" class="tutorial-box">
+      <h3>Tutorial</h3>
+      <p></p>
     </div>
 
   </div>
+
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-
-<script>
-const guildId = "<%= guild?.id %>";
-
-const BLOCKS = {
-  1: { name: "Send Message", fields: ["channel","message"] },
-  2: { name: "Wait", fields: ["seconds"] },
-  3: { name: "Add Role", fields: ["role"] }
-};
-
-let blocks = [];
-
-function renderLibrary(){
-  const el=document.getElementById("blockLibrary");
-  el.innerHTML="";
-  Object.entries(BLOCKS).forEach(([id,def])=>{
-    const b=document.createElement("button");
-    b.innerText=def.name;
-    b.onclick=()=>{blocks.push({id:Number(id),params:{}});renderCanvas();};
-    el.appendChild(b);
-  });
-}
-
-function renderCanvas(){
-  const el=document.getElementById("canvas");
-  el.innerHTML="";
-
-  blocks.forEach((block,index)=>{
-    const def=BLOCKS[block.id];
-
-    const wrap=document.createElement("div");
-    wrap.className="card";
-    wrap.dataset.index=index;
-
-    const title=document.createElement("div");
-    title.innerText=(index+1)+". "+def.name;
-
-    const fields=document.createElement("div");
-
-    def.fields.forEach(f=>{
-      const input=document.createElement("input");
-      input.placeholder=f;
-      input.value=block.params[f]||"";
-
-      input.oninput=()=>block.params[f]=input.value;
-      fields.appendChild(input);
-    });
-
-    const remove=document.createElement("button");
-    remove.innerText="Remove";
-    remove.onclick=()=>{blocks.splice(index,1);renderCanvas();};
-
-    wrap.appendChild(title);
-    wrap.appendChild(fields);
-    wrap.appendChild(remove);
-
-    el.appendChild(wrap);
-  });
-
-  new Sortable(el,{
-    animation:150,
-    onEnd:(e)=>{
-      const moved=blocks.splice(e.oldIndex,1)[0];
-      blocks.splice(e.newIndex,0,moved);
-    }
-  });
-}
-
-document.getElementById("save").onclick=async()=>{
-  const name=document.getElementById("automationName").value;
-
-  if(!name) return alert("Name required");
-  if(!blocks.length) return alert("Add blocks");
-
-  await fetch(`/api/guild/${guildId}/automations`,{
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body:JSON.stringify({
-      name,
-      f:blocks.map(b=>b.id),
-      p:blocks.map(b=>b.params)
-    })
-  });
-
-  alert("Saved");
-  blocks=[];
-  renderCanvas();
-};
-
-renderLibrary();
-renderCanvas();
-</script>
+<link rel="stylesheet" href="/css/feature-builder.css">
+<script src="/js/feature-builder.js"></script>
