@@ -1,5 +1,7 @@
 <% layout('layouts/app') -%>
 
+<script>window.guildId = "<%= guild?.id %>";</script>
+
 <div class="bright-builder-shell">
 
   <aside class="builder-sidebar">
@@ -11,7 +13,7 @@
   <div class="builder-workspace">
 
     <div class="builder-topbar">
-      <div>Feature Builder</div>
+      <input id="featureName" placeholder="Feature name" />
       <button id="saveFeatureBtn" class="builder-btn">Save</button>
     </div>
 
