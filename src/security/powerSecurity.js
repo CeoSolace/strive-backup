@@ -4,11 +4,9 @@ const { AuditLogEvent, ChannelType, PermissionFlagsBits } = require("discord.js"
  * PowerSecurity
  * Real-time anti-nuke intelligence layer.
  *
- * This module does four jobs:
- * 1. Scores dangerous server actions in a rolling time window.
- * 2. Streams live intelligence into a locked admin-only log channel.
- * 3. Builds incident timelines from recent suspicious activity.
- * 4. Auto-tags suspicious patterns so staff know what kind of attack is happening.
+ * Channels created automatically:
+ * - powersecurity-live: raw real-time action stream
+ * - powersecurity-incidents: incident timelines, threat tags and containment summaries
  */
 module.exports = function powerSecurity(client) {
   const config = {
@@ -17,7 +15,8 @@ module.exports = function powerSecurity(client) {
     incidentWindowMs: 5 * 60_000,
     maxStoredActions: 250,
 
-    logChannelName: "powersecurity-logs",
+    liveChannelName: "powersecurity-live",
+    incidentChannelName: "powersecurity-incidents",
 
     warnScore: 35,
     containScore: 70,
@@ -45,7 +44,8 @@ module.exports = function powerSecurity(client) {
 
   const userScores = new Map();
   const recentActions = [];
-  const logChannelCache = new Map();
+  const channelCache = new Map();
+  const lastIncidentPost = new Map();
 
   function now() {
     return Date.now();
@@ -110,6 +110,10 @@ module.exports = function powerSecurity(client) {
     return tags.length ? tags : ["SUSPICIOUS_ACTIVITY"];
   }
 
+  function formatTags(tags) {
+    return (tags?.length ? tags : ["SUSPICIOUS_ACTIVITY"]).map((tag) => `\`${tag}\``).join(" ");
+  }
+
   function getPublicAction(action) {
     return {
       guildId: action.guildId,
@@ -128,8 +132,12 @@ module.exports = function powerSecurity(client) {
   client.powerSecurity = {
     config,
 
-    async ensureLogChannel(guild) {
-      return ensureLogChannel(guild);
+    async ensureChannels(guild) {
+      return ensurePowerSecurityChannels(guild);
+    },
+
+    async ensureAllGuildChannels() {
+      return ensureAllGuildChannels();
     },
 
     getStatus(guildId) {
@@ -150,7 +158,8 @@ module.exports = function powerSecurity(client) {
 
       return {
         enabled: config.enabled,
-        logChannelName: config.logChannelName,
+        liveChannelName: config.liveChannelName,
+        incidentChannelName: config.incidentChannelName,
         windowSeconds: Math.round(config.windowMs / 1000),
         incidentWindowSeconds: Math.round(config.incidentWindowMs / 1000),
         warnScore: config.warnScore,
@@ -193,40 +202,7 @@ module.exports = function powerSecurity(client) {
     },
 
     getIncident(guildId, limit = 25) {
-      const cutoff = now() - config.incidentWindowMs;
-      const logs = recentActions
-        .filter((action) => action.guildId === guildId && action.createdAt >= cutoff)
-        .slice(-limit);
-
-      if (!logs.length) {
-        return {
-          active: false,
-          title: "No recent incident detected",
-          totalScore: 0,
-          highestThreat: "LOW",
-          tags: [],
-          startedAt: null,
-          endedAt: null,
-          users: [],
-          timeline: [],
-        };
-      }
-
-      const totalScore = logs.reduce((sum, action) => sum + action.weight, 0);
-      const users = [...new Map(logs.map((action) => [action.userId, action.userTag])).entries()].map(([userId, userTag]) => ({ userId, userTag }));
-      const allTags = [...new Set(logs.flatMap((action) => action.tags || []))];
-
-      return {
-        active: true,
-        title: totalScore >= config.criticalScore ? "Critical incident timeline" : "Recent security incident timeline",
-        totalScore,
-        highestThreat: getThreatLevel(Math.max(...logs.map((action) => action.scoreAfter || 0))),
-        tags: allTags.length ? allTags : ["SUSPICIOUS_ACTIVITY"],
-        startedAt: logs[0].createdAt,
-        endedAt: logs.at(-1).createdAt,
-        users,
-        timeline: logs.map(getPublicAction),
-      };
+      return buildIncident(guildId, limit);
     },
   };
 
@@ -234,14 +210,19 @@ module.exports = function powerSecurity(client) {
     return recentActions.some((action) => action.userId === userId && action.guildId === guildId);
   }
 
-  async function ensureLogChannel(guild) {
-    const cachedId = logChannelCache.get(guild.id);
+  function getChannelCacheKey(guildId, channelName) {
+    return `${guildId}:${channelName}`;
+  }
+
+  async function ensurePrivateChannel(guild, channelName, reason, introMessage) {
+    const cacheKey = getChannelCacheKey(guild.id, channelName);
+    const cachedId = channelCache.get(cacheKey);
     const cached = cachedId ? guild.channels.cache.get(cachedId) : null;
     if (cached?.isTextBased?.()) return cached;
 
-    let channel = guild.channels.cache.find((ch) => ch.name === config.logChannelName && ch.isTextBased?.());
+    let channel = guild.channels.cache.find((ch) => ch.name === channelName && ch.isTextBased?.());
     if (channel) {
-      logChannelCache.set(guild.id, channel.id);
+      channelCache.set(cacheKey, channel.id);
       return channel;
     }
 
@@ -261,7 +242,12 @@ module.exports = function powerSecurity(client) {
       },
       {
         id: me.id,
-        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
+        allow: [
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.ReadMessageHistory,
+          PermissionFlagsBits.ManageChannels,
+        ],
       },
       ...adminRoles.map((role) => ({
         id: role.id,
@@ -270,37 +256,127 @@ module.exports = function powerSecurity(client) {
     ];
 
     channel = await guild.channels.create({
-      name: config.logChannelName,
+      name: channelName,
       type: ChannelType.GuildText,
-      reason: "PowerSecurity admin-only live security logging channel",
+      reason,
       permissionOverwrites,
     }).catch(() => null);
 
     if (channel) {
-      logChannelCache.set(guild.id, channel.id);
-      await channel.send({
-        content: "**PowerSecurity live logs enabled**\nThis channel is locked to administrators and will receive real-time anti-nuke intelligence.",
-      }).catch(() => null);
+      channelCache.set(cacheKey, channel.id);
+      if (introMessage) await channel.send({ content: introMessage }).catch(() => null);
     }
 
     return channel;
   }
 
-  async function sendLiveLog(guild, action) {
-    const channel = await ensureLogChannel(guild);
-    if (!channel) return;
+  async function ensurePowerSecurityChannels(guild) {
+    const live = await ensurePrivateChannel(
+      guild,
+      config.liveChannelName,
+      "PowerSecurity admin-only live security stream",
+      "**PowerSecurity Live Stream enabled**\nThis private channel receives raw suspicious action logs in real time."
+    );
 
-    const tags = action.tags?.length ? action.tags.map((tag) => `\`${tag}\``).join(" ") : "`SUSPICIOUS_ACTIVITY`";
+    const incidents = await ensurePrivateChannel(
+      guild,
+      config.incidentChannelName,
+      "PowerSecurity admin-only incident and tag analysis",
+      "**PowerSecurity Incident Analysis enabled**\nThis private channel receives incident timelines, attack tags and containment summaries."
+    );
+
+    return { live, incidents };
+  }
+
+  async function ensureAllGuildChannels() {
+    const guilds = [...client.guilds.cache.values()];
+    for (const guild of guilds) {
+      await ensurePowerSecurityChannels(guild).catch(() => null);
+    }
+  }
+
+  function buildIncident(guildId, limit = 25) {
+    const cutoff = now() - config.incidentWindowMs;
+    const logs = recentActions
+      .filter((action) => action.guildId === guildId && action.createdAt >= cutoff)
+      .slice(-limit);
+
+    if (!logs.length) {
+      return {
+        active: false,
+        title: "No recent incident detected",
+        totalScore: 0,
+        highestThreat: "LOW",
+        tags: [],
+        startedAt: null,
+        endedAt: null,
+        users: [],
+        timeline: [],
+      };
+    }
+
+    const totalScore = logs.reduce((sum, action) => sum + action.weight, 0);
+    const users = [...new Map(logs.map((action) => [action.userId, action.userTag])).entries()].map(([userId, userTag]) => ({ userId, userTag }));
+    const allTags = [...new Set(logs.flatMap((action) => action.tags || []))];
+    const highestScore = Math.max(...logs.map((action) => action.scoreAfter || 0));
+
+    return {
+      active: true,
+      title: totalScore >= config.criticalScore ? "Critical incident timeline" : "Recent security incident timeline",
+      totalScore,
+      highestThreat: getThreatLevel(highestScore),
+      tags: allTags.length ? allTags : ["SUSPICIOUS_ACTIVITY"],
+      startedAt: logs[0].createdAt,
+      endedAt: logs.at(-1).createdAt,
+      users,
+      timeline: logs.map(getPublicAction),
+    };
+  }
+
+  async function sendLiveLog(guild, action) {
+    const { live } = await ensurePowerSecurityChannels(guild);
+    if (!live) return;
+
     const content = [
       `**PowerSecurity Live Log**`,
       `User: **${action.userTag}** (${action.userId})`,
       `Action: **${action.actionType}** (+${action.weight})`,
       `Threat: **${action.threatLevel}** | Score: **${action.scoreAfter}**`,
-      `Tags: ${tags}`,
       `Time: <t:${Math.floor(action.createdAt / 1000)}:F>`,
     ].join("\n");
 
-    await channel.send({ content }).catch(() => null);
+    await live.send({ content }).catch(() => null);
+  }
+
+  async function sendIncidentAnalysis(guild, action, current) {
+    if (action.threatLevel === "LOW") return;
+
+    const cooldownKey = `${guild.id}:${action.userId}:${action.threatLevel}`;
+    const lastPost = lastIncidentPost.get(cooldownKey) || 0;
+    if (now() - lastPost < 10_000 && action.threatLevel !== "CRITICAL") return;
+    lastIncidentPost.set(cooldownKey, now());
+
+    const { incidents } = await ensurePowerSecurityChannels(guild);
+    if (!incidents) return;
+
+    const incident = buildIncident(guild.id, 12);
+    const timeline = incident.timeline
+      .slice(-8)
+      .map((item) => `• <t:${Math.floor(item.createdAt / 1000)}:T> ${item.userTag}: ${item.actionType} (+${item.weight})`)
+      .join("\n");
+
+    const content = [
+      `**${incident.title}**`,
+      `Primary user: **${action.userTag}** (${action.userId})`,
+      `Current score: **${current.score}** | Threat: **${action.threatLevel}**`,
+      `Incident score: **${incident.totalScore}** | Users involved: **${incident.users.length}**`,
+      `Attack tags: ${formatTags(incident.tags)}`,
+      "",
+      `**Timeline**`,
+      timeline || "No timeline available.",
+    ].join("\n");
+
+    await incidents.send({ content }).catch(() => null);
   }
 
   async function scoreAction(guild, executor, actionType, weight, metadata = {}) {
@@ -341,6 +417,7 @@ module.exports = function powerSecurity(client) {
     );
 
     await sendLiveLog(guild, action);
+    await sendIncidentAnalysis(guild, action, current);
 
     if (current.score >= config.criticalScore) {
       await handleCritical(guild, executor, current);
@@ -392,25 +469,27 @@ module.exports = function powerSecurity(client) {
   }
 
   async function notifyGuild(guild, executor, data, mode) {
+    const { incidents } = await ensurePowerSecurityChannels(guild);
+    if (!incidents) return;
+
     const summary = data.actions
       .slice(-8)
       .map((action) => `• ${action.actionType} (+${action.weight})`)
       .join("\n");
 
-    const tags = getPatternTags(data.actions, data.score).map((tag) => `\`${tag}\``).join(" ");
+    const tags = getPatternTags(data.actions, data.score);
 
     const message = [
       `**PowerSecurity ${mode} Alert**`,
       `User: ${executor.tag} (${executor.id})`,
       `Threat score: ${data.score}`,
-      `Tags: ${tags}`,
+      `Tags: ${formatTags(tags)}`,
       `Window: ${Math.round(config.windowMs / 1000)} seconds`,
       "",
       summary || "No action summary available.",
     ].join("\n");
 
-    const channel = await ensureLogChannel(guild);
-    if (channel) await channel.send({ content: message }).catch(() => null);
+    await incidents.send({ content: message }).catch(() => null);
   }
 
   function dangerousPermissionAdded(oldRole, newRole) {
@@ -427,8 +506,12 @@ module.exports = function powerSecurity(client) {
     return dangerous.some((perm) => !oldRole.permissions.has(perm) && newRole.permissions.has(perm));
   }
 
+  client.once("ready", async () => {
+    await ensureAllGuildChannels();
+  });
+
   client.on("guildCreate", async (guild) => {
-    await ensureLogChannel(guild);
+    await ensurePowerSecurityChannels(guild);
   });
 
   client.on("channelDelete", async (channel) => {
@@ -439,7 +522,7 @@ module.exports = function powerSecurity(client) {
 
   client.on("channelCreate", async (channel) => {
     if (!channel.guild) return;
-    if (channel.name === config.logChannelName) return;
+    if ([config.liveChannelName, config.incidentChannelName].includes(channel.name)) return;
     const executor = await getExecutor(channel.guild, AuditLogEvent.ChannelCreate, channel.id);
     await scoreAction(channel.guild, executor, "CHANNEL_CREATE", config.weights.CHANNEL_CREATE, { channelId: channel.id });
   });
