@@ -9,13 +9,26 @@ async function fetchGuild(guildID, client, guilds) {
   return { ...guild, ...settings._doc, ...guilds.find((g) => g.id === guild.id) };
 }
 
+function canManageGuild(guild) {
+  if (!guild) return false;
+  if (guild.owner === true) return true;
+
+  try {
+    const permissions = BigInt(guild.permissions || "0");
+    const perms = new Discord.PermissionsBitField(permissions);
+
+    return perms.has("Administrator") || perms.has("ManageGuild");
+  } catch {
+    return false;
+  }
+}
+
 async function fetchUser(userData, client, query) {
   if (userData.guilds) {
     userData.guilds.forEach((guild) => {
-      if (guild.permissions) {
-        const perms = new Discord.PermissionsBitField(BigInt(guild.permissions));
-        if (perms.has("ManageGuild")) guild.admin = true;
-      }
+      // Reset this every request so stale session data cannot mark random servers as manageable.
+      guild.admin = canManageGuild(guild);
+      guild.manageable = guild.admin;
 
       const inCache = client.guilds.cache.get(guild.id);
 
@@ -34,7 +47,7 @@ async function fetchUser(userData, client, query) {
       guild.displayed = query ? guild.name.toLowerCase().includes(query.toLowerCase()) : true;
     });
 
-    userData.displayedGuilds = userData.guilds.filter((g) => g.displayed && g.admin);
+    userData.displayedGuilds = userData.guilds.filter((g) => g.displayed && canManageGuild(g));
     if (userData.displayedGuilds.length < 1) delete userData.displayedGuilds;
   }
 
@@ -47,4 +60,4 @@ async function fetchUser(userData, client, query) {
   return userInfos;
 }
 
-module.exports = { fetchGuild, fetchUser };
+module.exports = { fetchGuild, fetchUser, canManageGuild };
