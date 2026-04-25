@@ -1,458 +1,76 @@
 <% layout('layouts/app') -%>
 
-<%
-  const safeGuild = typeof guild !== "undefined" && guild ? guild : null;
-  const safeTab = typeof tab === "string" && tab ? tab : "overview";
-%>
+<% const safeGuild = guild || null; const safeTab = tab || 'overview'; %>
 
 <div class="flex flex-col gap-6">
-  <div class="flex items-center gap-4">
-    <img
-      class="h-12 w-12 rounded-full"
-      src="<%= safeGuild?.iconURL || 'https://cdn.discordapp.com/embed/avatars/0.png' %>"
-      alt=""
-      referrerpolicy="no-referrer"
-    />
-    <div class="min-w-0">
-      <h1 class="truncate text-2xl font-semibold tracking-tight"><%= safeGuild?.name || "Server" %></h1>
-      <p class="mt-0.5 text-sm text-zinc-600 dark:text-zinc-300">
-        Manage server settings, modules, commands, and feature automations.
-      </p>
+  <h1 class="text-2xl font-semibold">Feature Builder</h1>
+
+  <% if (safeTab === 'automations') { %>
+
+  <div class="grid gap-6 xl:grid-cols-4">
+
+    <div class="card">
+      <h2 class="font-semibold">Blocks</h2>
+      <div id="blockLibrary"></div>
     </div>
+
+    <div class="card xl:col-span-2">
+      <h2 class="font-semibold">Build</h2>
+      <input id="automationName" placeholder="Feature name" class="input" />
+      <div id="canvas"></div>
+      <button id="save" class="btn">Save</button>
+    </div>
+
+    <div class="card">
+      <h2 class="font-semibold">Saved</h2>
+      <div id="list"></div>
+    </div>
+
   </div>
 
-  <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-    <a class="action <%= safeTab === 'overview' ? 'ring-2 ring-brand-500/30' : '' %>" href="?tab=overview">
-      <div class="action-title">Overview</div>
-      <div class="action-sub">Quick server summary</div>
-    </a>
-    <a class="action <%= safeTab === 'settings' ? 'ring-2 ring-brand-500/30' : '' %>" href="?tab=settings">
-      <div class="action-title">Settings</div>
-      <div class="action-sub">Guild preferences</div>
-    </a>
-    <a class="action <%= safeTab === 'modules' ? 'ring-2 ring-brand-500/30' : '' %>" href="?tab=modules">
-      <div class="action-title">Modules</div>
-      <div class="action-sub">Enable or disable modules</div>
-    </a>
-    <a class="action <%= safeTab === 'commands' ? 'ring-2 ring-brand-500/30' : '' %>" href="?tab=commands">
-      <div class="action-title">Commands</div>
-      <div class="action-sub">Control command access</div>
-    </a>
-    <a class="action <%= safeTab === 'automations' ? 'ring-2 ring-brand-500/30' : '' %>" href="?tab=automations">
-      <div class="action-title">Feature Builder</div>
-      <div class="action-sub">No-code block automations</div>
-    </a>
-  </div>
-
-  <% if (safeTab === "overview") { %>
-    <section class="grid gap-4 md:grid-cols-3">
-      <div class="card">
-        <div class="card-header">Guild</div>
-        <div class="card-value truncate"><%= safeGuild?.name || "Unknown" %></div>
-        <div class="card-sub">ID: <span class="font-mono"><%= safeGuild?.id || "N/A" %></span></div>
-      </div>
-      <div class="card">
-        <div class="card-header">Permissions</div>
-        <div class="card-value">Admin</div>
-        <div class="card-sub">You can manage this server in Bright.</div>
-      </div>
-      <div class="card">
-        <div class="card-header">Quick access</div>
-        <div class="mt-3 flex flex-wrap gap-2">
-          <a class="btn btn-secondary" href="?tab=settings">Settings</a>
-          <a class="btn btn-secondary" href="?tab=modules">Modules</a>
-          <a class="btn btn-secondary" href="?tab=commands">Commands</a>
-          <a class="btn btn-secondary" href="?tab=automations">Feature Builder</a>
-        </div>
-      </div>
-      <div class="card md:col-span-3">
-        <div class="card-title">What you can do here</div>
-        <div class="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-            <div class="font-semibold">Settings</div>
-            <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">Save custom guild preferences.</p>
-          </div>
-          <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-            <div class="font-semibold">Modules</div>
-            <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">Turn major systems on or off.</p>
-          </div>
-          <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-            <div class="font-semibold">Commands</div>
-            <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">Disable commands you do not want used.</p>
-          </div>
-          <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-            <div class="font-semibold">Feature Builder</div>
-            <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">Build automations with simple visual blocks.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-  <% } %>
-
-  <% if (safeTab === "settings") { %>
-    <section class="card">
-      <div class="card-title">Guild settings</div>
-      <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">Save a JSON settings object for this guild.</p>
-      <div class="mt-4">
-        <label class="block text-xs font-semibold uppercase tracking-wider text-zinc-500">Settings JSON</label>
-        <textarea id="guildSettingsJson" class="mt-2 min-h-[300px] w-full rounded-xl border border-zinc-300 p-3 font-mono text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" spellcheck="false" placeholder='{"prefix":"!"}'></textarea>
-      </div>
-      <div class="mt-4 flex items-center gap-2">
-        <button id="saveGuildSettings" class="btn btn-secondary">Save settings</button>
-        <span id="settingsStatus" class="text-sm text-zinc-600 dark:text-zinc-300"></span>
-      </div>
-    </section>
-  <% } %>
-
-  <% if (safeTab === "modules") { %>
-    <section class="card">
-      <div class="card-title">Modules</div>
-      <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">Toggle core systems for this server.</p>
-      <div id="modulesList" class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3"></div>
-    </section>
-  <% } %>
-
-  <% if (safeTab === "commands") { %>
-    <section class="card">
-      <div class="flex items-center justify-between gap-3">
-        <div>
-          <div class="card-title">Commands</div>
-          <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">Enable or disable commands for this guild.</p>
-        </div>
-        <input id="commandSearch" type="search" placeholder="Search commands..." class="w-full max-w-xs rounded-xl border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
-      </div>
-      <div id="commandsList" class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3"></div>
-    </section>
-  <% } %>
-
-  <% if (safeTab === "automations") { %>
-    <div class="grid gap-6 xl:grid-cols-4">
-      <section class="card xl:col-span-1">
-        <div class="card-title">Block Library</div>
-        <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">Click a block to add it. No code. No JSON.</p>
-        <div id="blockLibrary" class="mt-4 space-y-3"></div>
-      </section>
-
-      <section class="card xl:col-span-2">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <div class="card-title">Feature Builder</div>
-            <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">Build a feature by stacking blocks from top to bottom.</p>
-          </div>
-          <button id="clearBlocks" class="btn btn-ghost">Clear</button>
-        </div>
-
-        <div class="mt-4 grid gap-4 md:grid-cols-2">
-          <div>
-            <label class="block text-xs font-semibold uppercase tracking-wider text-zinc-500">Feature name</label>
-            <input id="automationName" type="text" class="mt-2 w-full rounded-xl border border-zinc-300 p-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" placeholder="Auto welcome flow" />
-          </div>
-          <div>
-            <label class="block text-xs font-semibold uppercase tracking-wider text-zinc-500">Run type</label>
-            <select id="automationRunType" class="mt-2 w-full rounded-xl border border-zinc-300 p-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
-              <option value="manual">Manual trigger</option>
-              <option value="member_join">When member joins</option>
-              <option value="message_sent">When message is sent</option>
-              <option value="scheduled">Scheduled later</option>
-            </select>
-          </div>
-        </div>
-
-        <div id="blockCanvas" class="mt-5 min-h-[360px] rounded-2xl border-2 border-dashed border-zinc-300 bg-zinc-50/60 p-4 dark:border-zinc-700 dark:bg-zinc-950/40">
-          <div id="emptyBuilder" class="flex h-[320px] flex-col items-center justify-center text-center text-sm text-zinc-500 dark:text-zinc-400">
-            <div class="text-4xl">🧩</div>
-            <div class="mt-3 font-semibold">Click blocks on the left to build your feature.</div>
-            <div class="mt-1">Example: Send message → Wait → Add role.</div>
-          </div>
-          <div id="selectedBlocks" class="space-y-3"></div>
-        </div>
-
-        <div class="mt-4 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-          <div class="text-sm font-semibold">Readable preview</div>
-          <ol id="automationPreview" class="mt-2 list-decimal space-y-1 pl-5 text-sm text-zinc-600 dark:text-zinc-300"></ol>
-        </div>
-
-        <div class="mt-4 flex flex-wrap items-center gap-2">
-          <button id="createAutomation" class="btn btn-secondary">Save feature</button>
-          <span id="automationStatus" class="text-sm text-zinc-600 dark:text-zinc-300"></span>
-        </div>
-      </section>
-
-      <section class="card xl:col-span-1">
-        <div class="card-title">Saved Features</div>
-        <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">Features already built for this server.</p>
-        <div id="automationList" class="mt-4 space-y-3"></div>
-      </section>
-    </div>
   <% } %>
 </div>
 
 <script>
-  const currentTab = "<%= safeTab %>";
-  const guildId = "<%= safeGuild?.id || "" %>";
+const guildId = "<%= safeGuild?.id %>";
 
-  async function getCsrf() {
-    const res = await fetch("/api/csrf", { credentials: "same-origin" });
-    const data = await res.json();
-    return data.csrfToken;
-  }
+const blocksDef = {
+  1: "Send Message",
+  2: "Wait",
+  3: "Add Role"
+};
 
-  async function api(url, options = {}) {
-    const finalOptions = { credentials: "same-origin", ...options };
-    if (finalOptions.method && finalOptions.method !== "GET") {
-      const csrf = await getCsrf();
-      finalOptions.headers = { ...(finalOptions.headers || {}), "X-CSRF-Token": csrf };
-    }
-    const res = await fetch(url, finalOptions);
-    const contentType = res.headers.get("content-type") || "";
-    const body = contentType.includes("application/json") ? await res.json() : await res.text();
-    if (!res.ok) throw new Error((body && body.error) || "Request failed");
-    return body;
-  }
+const blocks = [];
 
-  function makeToggleCard(title, description, checked, onChange) {
-    const wrap = document.createElement("div");
-    wrap.className = "rounded-xl border border-zinc-200 p-4 dark:border-zinc-800";
-    wrap.innerHTML = `<div class="flex items-start justify-between gap-3"><div><div class="font-semibold"></div><div class="mt-1 text-sm text-zinc-600 dark:text-zinc-300"></div></div><label class="switch"><input type="checkbox"><span class="slider"></span></label></div>`;
-    wrap.querySelector(".font-semibold").textContent = title;
-    wrap.querySelector(".text-sm").textContent = description;
-    const input = wrap.querySelector("input");
-    input.checked = !!checked;
-    input.addEventListener("change", () => onChange(input.checked, input));
-    return wrap;
-  }
+function renderLibrary(){
+  const el = document.getElementById("blockLibrary");
+  Object.entries(blocksDef).forEach(([id,name])=>{
+    const b=document.createElement("button");
+    b.innerText=name;
+    b.onclick=()=>{blocks.push({id:Number(id),params:{}});renderCanvas();};
+    el.appendChild(b);
+  });
+}
 
-  async function loadSettingsTab() {
-    const textarea = document.getElementById("guildSettingsJson");
-    const status = document.getElementById("settingsStatus");
-    const saveBtn = document.getElementById("saveGuildSettings");
-    try {
-      const data = await api(`/api/guild/${guildId}/settings`);
-      textarea.value = JSON.stringify(data.settings || {}, null, 2);
-    } catch (err) { status.textContent = err.message; }
-    saveBtn.addEventListener("click", async () => {
-      status.textContent = "";
-      let parsed;
-      try { parsed = textarea.value.trim() ? JSON.parse(textarea.value) : {}; }
-      catch { status.textContent = "Invalid JSON"; return; }
-      try {
-        saveBtn.disabled = true;
-        await api(`/api/guild/${guildId}/settings`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ settings: parsed }) });
-        status.textContent = "Settings saved.";
-      } catch (err) { status.textContent = err.message; }
-      finally { saveBtn.disabled = false; }
-    });
-  }
+function renderCanvas(){
+  const el=document.getElementById("canvas");
+  el.innerHTML="";
+  blocks.forEach((b,i)=>{
+    const d=document.createElement("div");
+    d.innerText=i+1+". "+blocksDef[b.id];
+    el.appendChild(d);
+  });
+}
 
-  async function loadModulesTab() {
-    const root = document.getElementById("modulesList");
-    root.innerHTML = "";
-    try {
-      const data = await api(`/api/guild/${guildId}/modules`);
-      const modules = data.availableModules || [];
-      const enabled = data.enabled || {};
-      modules.forEach((moduleName) => root.appendChild(makeToggleCard(moduleName, `Enable or disable the ${moduleName} module.`, !!enabled[moduleName], async (next, input) => {
-        input.disabled = true;
-        try { await api(`/api/guild/${guildId}/modules`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ module: moduleName, enabled: next }) }); }
-        catch (err) { input.checked = !next; alert(err.message); }
-        finally { input.disabled = false; }
-      })));
-      if (!modules.length) root.innerHTML = `<div class="text-sm text-zinc-600 dark:text-zinc-300">No modules available.</div>`;
-    } catch (err) { root.innerHTML = `<div class="text-sm text-red-600">${err.message}</div>`; }
-  }
+document.getElementById("save").onclick=async()=>{
+  const name=document.getElementById("automationName").value;
+  await fetch(`/api/guild/${guildId}/automations`,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({name,f:blocks.map(b=>b.id),p:blocks.map(b=>b.params)})
+  });
+  alert("Saved");
+};
 
-  async function loadCommandsTab() {
-    const root = document.getElementById("commandsList");
-    const search = document.getElementById("commandSearch");
-    try {
-      const data = await api(`/api/guild/${guildId}/commands`);
-      const commands = data.availableCommands || [];
-      const enabled = data.enabled || {};
-      function render(filter = "") {
-        root.innerHTML = "";
-        commands.filter((cmd) => cmd.toLowerCase().includes(filter.toLowerCase())).forEach((commandName) => {
-          root.appendChild(makeToggleCard(commandName, `Allow or block the ${commandName} command.`, enabled[commandName] !== false, async (next, input) => {
-            input.disabled = true;
-            try { await api(`/api/guild/${guildId}/commands`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ command: commandName, enabled: next }) }); enabled[commandName] = next; }
-            catch (err) { input.checked = !next; alert(err.message); }
-            finally { input.disabled = false; }
-          }));
-        });
-        if (!root.children.length) root.innerHTML = `<div class="text-sm text-zinc-600 dark:text-zinc-300">No matching commands.</div>`;
-      }
-      render();
-      search.addEventListener("input", () => render(search.value || ""));
-    } catch (err) { root.innerHTML = `<div class="text-sm text-red-600">${err.message}</div>`; }
-  }
-
-  const BLOCK_DEFS = {
-    1: { name: "Send message", emoji: "💬", help: "Post a message in a channel.", fields: [{ k: "c", label: "Channel ID", ph: "123456789" }, { k: "m", label: "Message", ph: "Welcome to the server" }] },
-    2: { name: "Wait", emoji: "⏱️", help: "Pause before the next block.", fields: [{ k: "t", label: "Seconds", ph: "10", type: "number" }] },
-    3: { name: "Add role", emoji: "➕", help: "Give a role to a member.", fields: [{ k: "r", label: "Role ID", ph: "123456789" }] },
-    4: { name: "Remove role", emoji: "➖", help: "Remove a role from a member.", fields: [{ k: "r", label: "Role ID", ph: "123456789" }] },
-    5: { name: "Create channel", emoji: "📁", help: "Create a channel.", fields: [{ k: "n", label: "Channel name", ph: "new-channel" }] },
-    6: { name: "Delete channel", emoji: "🗑️", help: "Delete a channel by ID.", fields: [{ k: "c", label: "Channel ID", ph: "123456789" }] },
-    7: { name: "Lock channel", emoji: "🔒", help: "Stop members from sending messages.", fields: [{ k: "c", label: "Channel ID", ph: "123456789" }] },
-    8: { name: "Unlock channel", emoji: "🔓", help: "Allow messages again.", fields: [{ k: "c", label: "Channel ID", ph: "123456789" }] },
-    9: { name: "Kick member", emoji: "👢", help: "Kick the target member.", fields: [{ k: "x", label: "Reason", ph: "Rule violation" }] },
-    10: { name: "Ban member", emoji: "⛔", help: "Ban the target member.", fields: [{ k: "x", label: "Reason", ph: "Severe rule violation" }] },
-    11: { name: "Send webhook", emoji: "📡", help: "Send a webhook message.", fields: [{ k: "u", label: "Webhook URL", ph: "https://discord.com/api/webhooks/..." }, { k: "m", label: "Message", ph: "Hello" }] },
-    12: { name: "If member has role", emoji: "❓", help: "Condition block for role checks.", fields: [{ k: "r", label: "Role ID", ph: "123456789" }] },
-  };
-
-  async function loadAutomationsTab() {
-    const library = document.getElementById("blockLibrary");
-    const selectedRoot = document.getElementById("selectedBlocks");
-    const empty = document.getElementById("emptyBuilder");
-    const preview = document.getElementById("automationPreview");
-    const list = document.getElementById("automationList");
-    const createBtn = document.getElementById("createAutomation");
-    const clearBtn = document.getElementById("clearBlocks");
-    const status = document.getElementById("automationStatus");
-    const nameEl = document.getElementById("automationName");
-    const runTypeEl = document.getElementById("automationRunType");
-    const blocks = [];
-
-    function getDef(id) { return BLOCK_DEFS[id] || { name: `Block ${id}`, emoji: "🧩", help: "Custom block", fields: [] }; }
-
-    function renderLibrary() {
-      library.innerHTML = "";
-      Object.entries(BLOCK_DEFS).forEach(([id, def]) => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "w-full rounded-2xl border border-zinc-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-brand-500/40 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-950";
-        btn.innerHTML = `<div class="flex items-center gap-3"><span class="text-2xl">${def.emoji}</span><div><div class="font-semibold">${def.name}</div><div class="text-xs text-zinc-500 dark:text-zinc-400">${def.help}</div></div></div>`;
-        btn.addEventListener("click", () => {
-          blocks.push({ id: Number(id), params: {} });
-          renderCanvas();
-        });
-        library.appendChild(btn);
-      });
-    }
-
-    function renderCanvas() {
-      selectedRoot.innerHTML = "";
-      empty.style.display = blocks.length ? "none" : "flex";
-      blocks.forEach((block, index) => {
-        const def = getDef(block.id);
-        const card = document.createElement("div");
-        card.className = "rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950";
-        const fields = def.fields.map((field) => `
-          <label class="block">
-            <span class="text-xs font-semibold uppercase tracking-wider text-zinc-500">${field.label}</span>
-            <input data-param="${field.k}" type="${field.type || "text"}" value="${block.params[field.k] || ""}" placeholder="${field.ph || ""}" class="mt-1 w-full rounded-xl border border-zinc-300 p-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100" />
-          </label>
-        `).join("");
-        card.innerHTML = `
-          <div class="flex items-start justify-between gap-3">
-            <div class="flex items-center gap-3">
-              <span class="text-2xl">${def.emoji}</span>
-              <div><div class="font-semibold">${index + 1}. ${def.name}</div><div class="text-xs text-zinc-500 dark:text-zinc-400">${def.help}</div></div>
-            </div>
-            <div class="flex gap-1">
-              <button type="button" data-move="up" class="btn btn-ghost">↑</button>
-              <button type="button" data-move="down" class="btn btn-ghost">↓</button>
-              <button type="button" data-remove="true" class="btn btn-ghost">Remove</button>
-            </div>
-          </div>
-          <div class="mt-4 grid gap-3 md:grid-cols-2">${fields || `<div class="text-sm text-zinc-500">No details needed for this block.</div>`}</div>
-        `;
-        card.querySelectorAll("input[data-param]").forEach((input) => input.addEventListener("input", () => {
-          block.params[input.dataset.param] = input.value;
-          renderPreview();
-        }));
-        card.querySelector("[data-remove]").addEventListener("click", () => { blocks.splice(index, 1); renderCanvas(); });
-        card.querySelector("[data-move='up']").addEventListener("click", () => { if (index > 0) { [blocks[index - 1], blocks[index]] = [blocks[index], blocks[index - 1]]; renderCanvas(); } });
-        card.querySelector("[data-move='down']").addEventListener("click", () => { if (index < blocks.length - 1) { [blocks[index + 1], blocks[index]] = [blocks[index], blocks[index + 1]]; renderCanvas(); } });
-        selectedRoot.appendChild(card);
-      });
-      renderPreview();
-    }
-
-    function readable(block) {
-      const def = getDef(block.id);
-      const p = block.params || {};
-      if (block.id === 1) return `Send “${p.m || "message"}” to channel ${p.c || "not set"}`;
-      if (block.id === 2) return `Wait ${p.t || "0"} seconds`;
-      if (block.id === 3) return `Add role ${p.r || "not set"}`;
-      if (block.id === 4) return `Remove role ${p.r || "not set"}`;
-      if (block.id === 5) return `Create channel ${p.n || "not set"}`;
-      if (block.id === 6) return `Delete channel ${p.c || "not set"}`;
-      if (block.id === 7) return `Lock channel ${p.c || "not set"}`;
-      if (block.id === 8) return `Unlock channel ${p.c || "not set"}`;
-      if (block.id === 9) return `Kick member. Reason: ${p.x || "not set"}`;
-      if (block.id === 10) return `Ban member. Reason: ${p.x || "not set"}`;
-      if (block.id === 11) return `Send webhook message “${p.m || "message"}”`;
-      if (block.id === 12) return `Only continue if member has role ${p.r || "not set"}`;
-      return def.name;
-    }
-
-    function renderPreview() {
-      preview.innerHTML = "";
-      blocks.forEach((block) => {
-        const li = document.createElement("li");
-        li.textContent = readable(block);
-        preview.appendChild(li);
-      });
-      if (!blocks.length) preview.innerHTML = `<li>Add blocks to see the feature plan.</li>`;
-    }
-
-    function savedCard(item, onDelete) {
-      const wrap = document.createElement("div");
-      wrap.className = "rounded-xl border border-zinc-200 p-4 dark:border-zinc-800";
-      const names = (item.blocks || []).map((b) => b.label).join(" → ") || "No blocks";
-      wrap.innerHTML = `<div class="font-semibold"></div><div class="mt-1 text-xs text-zinc-500 dark:text-zinc-400"></div><button type="button" class="btn btn-ghost mt-3">Delete</button>`;
-      wrap.querySelector(".font-semibold").textContent = item.name || "Untitled feature";
-      wrap.querySelector(".text-xs").textContent = names;
-      wrap.querySelector("button").addEventListener("click", () => onDelete(item));
-      return wrap;
-    }
-
-    async function refreshList() {
-      list.innerHTML = "";
-      try {
-        const data = await api(`/api/guild/${guildId}/automations`);
-        const items = data.items || [];
-        items.forEach((item) => list.appendChild(savedCard(item, async (target) => {
-          if (!confirm(`Delete feature "${target.name}"?`)) return;
-          try { await api(`/api/guild/${guildId}/automations/${target._id}`, { method: "DELETE" }); await refreshList(); }
-          catch (err) { alert(err.message); }
-        })));
-        if (!items.length) list.innerHTML = `<div class="text-sm text-zinc-600 dark:text-zinc-300">No features created yet.</div>`;
-      } catch (err) { list.innerHTML = `<div class="text-sm text-red-600">${err.message}</div>`; }
-    }
-
-    createBtn.addEventListener("click", async () => {
-      status.textContent = "";
-      const name = nameEl.value.trim();
-      if (!name) { status.textContent = "Name your feature first."; return; }
-      if (!blocks.length) { status.textContent = "Add at least one block."; return; }
-      const payload = {
-        name,
-        enabled: true,
-        f: blocks.map((b) => b.id),
-        p: blocks.map((b) => ({ ...(b.params || {}), run: runTypeEl.value })),
-      };
-      try {
-        createBtn.disabled = true;
-        await api(`/api/guild/${guildId}/automations`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-        nameEl.value = "";
-        blocks.splice(0, blocks.length);
-        renderCanvas();
-        status.textContent = "Feature saved.";
-        await refreshList();
-      } catch (err) { status.textContent = err.message; }
-      finally { createBtn.disabled = false; }
-    });
-
-    clearBtn.addEventListener("click", () => { blocks.splice(0, blocks.length); renderCanvas(); });
-    renderLibrary();
-    renderCanvas();
-    await refreshList();
-  }
-
-  if (currentTab === "settings") loadSettingsTab();
-  if (currentTab === "modules") loadModulesTab();
-  if (currentTab === "commands") loadCommandsTab();
-  if (currentTab === "automations") loadAutomationsTab();
+renderLibrary();
 </script>
