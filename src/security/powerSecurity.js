@@ -2,35 +2,27 @@ const { AuditLogEvent, PermissionFlagsBits } = require("discord.js");
 
 /**
  * PowerSecurity
- * A high-speed anti-nuke intelligence layer for Strive/Bright.
+ * Real-time anti-nuke intelligence layer.
  *
- * Goal:
- * - Detect dangerous staff behaviour by pattern, not by one single action.
- * - Score risk in real time.
- * - Auto-contain attackers before a server is fully damaged.
- *
- * Loaded automatically by BotClient.loadSecurityModules("src/security").
+ * This module does two jobs:
+ * 1. Scores dangerous server actions in a rolling time window.
+ * 2. Exposes readable security logs to commands through client.powerSecurity.
  */
 module.exports = function powerSecurity(client) {
   const config = {
     enabled: true,
-
-    // How long actions stay relevant for scoring
     windowMs: 30_000,
+    maxStoredActions: 250,
 
-    // Score thresholds
     warnScore: 35,
     containScore: 70,
     criticalScore: 110,
 
-    // Optional automatic response
     autoContain: true,
     autoBanCritical: false,
 
-    // Ignore bot owners
     trustedUsers: [...(client.config?.OWNER_IDS || [])],
 
-    // Event weights
     weights: {
       CHANNEL_DELETE: 30,
       CHANNEL_CREATE: 12,
@@ -53,17 +45,18 @@ module.exports = function powerSecurity(client) {
     return Date.now();
   }
 
-  function cleanOldActions() {
+  function cleanOldScores() {
     const cutoff = now() - config.windowMs;
-    while (recentActions.length && recentActions[0].createdAt < cutoff) {
-      recentActions.shift();
-    }
 
     for (const [userId, data] of userScores.entries()) {
       data.actions = data.actions.filter((action) => action.createdAt >= cutoff);
       data.score = data.actions.reduce((total, action) => total + action.weight, 0);
       if (data.actions.length === 0) userScores.delete(userId);
     }
+  }
+
+  function trimStoredActions() {
+    while (recentActions.length > config.maxStoredActions) recentActions.shift();
   }
 
   async function getExecutor(guild, type, targetId) {
@@ -85,31 +78,125 @@ module.exports = function powerSecurity(client) {
     return config.trustedUsers.includes(userId);
   }
 
+  function getThreatLevel(score) {
+    if (score >= config.criticalScore) return "CRITICAL";
+    if (score >= config.containScore) return "HIGH";
+    if (score >= config.warnScore) return "MEDIUM";
+    return "LOW";
+  }
+
+  function getPublicAction(action) {
+    return {
+      guildId: action.guildId,
+      userId: action.userId,
+      userTag: action.userTag,
+      actionType: action.actionType,
+      weight: action.weight,
+      scoreAfter: action.scoreAfter,
+      threatLevel: action.threatLevel,
+      metadata: action.metadata,
+      createdAt: action.createdAt,
+    };
+  }
+
+  client.powerSecurity = {
+    config,
+
+    getStatus(guildId) {
+      cleanOldScores();
+
+      const activeThreats = [...userScores.entries()]
+        .map(([userId, data]) => ({
+          userId,
+          userTag: data.userTag,
+          score: data.score,
+          threatLevel: getThreatLevel(data.score),
+          actionCount: data.actions.length,
+          lastActionAt: data.actions.at(-1)?.createdAt || null,
+        }))
+        .filter((entry) => !guildId || dataBelongsToGuild(entry.userId, guildId))
+        .sort((a, b) => b.score - a.score);
+
+      return {
+        enabled: config.enabled,
+        windowSeconds: Math.round(config.windowMs / 1000),
+        warnScore: config.warnScore,
+        containScore: config.containScore,
+        criticalScore: config.criticalScore,
+        autoContain: config.autoContain,
+        autoBanCritical: config.autoBanCritical,
+        storedActions: recentActions.filter((action) => !guildId || action.guildId === guildId).length,
+        activeThreats,
+      };
+    },
+
+    getRecentLogs(guildId, limit = 10) {
+      cleanOldScores();
+      return recentActions
+        .filter((action) => !guildId || action.guildId === guildId)
+        .slice(-limit)
+        .reverse()
+        .map(getPublicAction);
+    },
+
+    getUser(guildId, userId) {
+      cleanOldScores();
+      const data = userScores.get(userId);
+      const userLogs = recentActions
+        .filter((action) => action.userId === userId && (!guildId || action.guildId === guildId))
+        .slice(-10)
+        .reverse()
+        .map(getPublicAction);
+
+      return {
+        userId,
+        userTag: data?.userTag || userLogs[0]?.userTag || "Unknown user",
+        score: data?.score || 0,
+        threatLevel: getThreatLevel(data?.score || 0),
+        activeActions: data?.actions?.length || 0,
+        logs: userLogs,
+      };
+    },
+  };
+
+  function dataBelongsToGuild(userId, guildId) {
+    return recentActions.some((action) => action.userId === userId && action.guildId === guildId);
+  }
+
   async function scoreAction(guild, executor, actionType, weight, metadata = {}) {
     if (!executor || executor.bot || isTrusted(executor.id)) return;
 
-    cleanOldActions();
+    cleanOldScores();
+
+    const current = userScores.get(executor.id) || {
+      score: 0,
+      userTag: executor.tag,
+      actions: [],
+    };
 
     const action = {
       guildId: guild.id,
       userId: executor.id,
+      userTag: executor.tag,
       actionType,
       weight,
       metadata,
       createdAt: now(),
     };
 
-    recentActions.push(action);
-
-    const current = userScores.get(executor.id) || { score: 0, actions: [] };
     current.actions.push(action);
     current.score += weight;
-    userScores.set(executor.id, current);
+    current.userTag = executor.tag;
 
-    const level = getThreatLevel(current.score);
+    action.scoreAfter = current.score;
+    action.threatLevel = getThreatLevel(current.score);
+
+    userScores.set(executor.id, current);
+    recentActions.push(action);
+    trimStoredActions();
 
     client.logger.warn(
-      `[PowerSecurity] ${guild.name}: ${executor.tag} scored ${weight} for ${actionType}. Total: ${current.score} (${level})`
+      `[PowerSecurity] ${guild.name}: ${executor.tag} scored ${weight} for ${actionType}. Total: ${current.score} (${action.threatLevel})`
     );
 
     if (current.score >= config.criticalScore) {
@@ -119,13 +206,6 @@ module.exports = function powerSecurity(client) {
     } else if (current.score >= config.warnScore) {
       await notifyGuild(guild, executor, current, "WARN");
     }
-  }
-
-  function getThreatLevel(score) {
-    if (score >= config.criticalScore) return "CRITICAL";
-    if (score >= config.containScore) return "HIGH";
-    if (score >= config.warnScore) return "MEDIUM";
-    return "LOW";
   }
 
   async function containUser(guild, executor, data, mode = "CONTAIN") {
