@@ -9,6 +9,7 @@ module.exports = {
 
   slashCommand: {
     enabled: true,
+    ephemeral: true,
     options: [
       {
         name: "setup",
@@ -46,8 +47,6 @@ module.exports = {
 
   async interactionRun(interaction) {
     const sub = interaction.options.getSubcommand();
-
-    await interaction.deferReply({ flags: 64 });
 
     try {
       if (sub === "setup") {
