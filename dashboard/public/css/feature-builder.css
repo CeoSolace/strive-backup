@@ -1,0 +1,218 @@
+.bright-builder-shell {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  min-height: calc(100vh - 150px);
+  border-radius: 24px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: #15191f;
+}
+
+.builder-sidebar {
+  background: #1d2127;
+  border-right: 1px solid rgba(255,255,255,0.08);
+  padding: 18px;
+  overflow-y: auto;
+}
+
+.builder-topbar {
+  height: 64px;
+  background: #20242b;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 18px;
+}
+
+.builder-workspace {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.builder-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 680px;
+  overflow: hidden;
+  background-color: #282c33;
+  background-image: radial-gradient(rgba(255,255,255,0.12) 1px, transparent 1px);
+  background-size: 12px 12px;
+}
+
+.block-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-bottom: 1px solid rgba(255,255,255,0.12);
+  margin: 18px -18px 18px;
+}
+
+.block-tab {
+  padding: 14px 10px;
+  text-align: center;
+  color: #b7bdc7;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.block-tab.active[data-type="option"] { border-color: #a855f7; color: #fff; }
+.block-tab.active[data-type="action"] { border-color: #3b82f6; color: #fff; }
+.block-tab.active[data-type="condition"] { border-color: #22c55e; color: #fff; }
+
+.block-search {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: #2d323a;
+  color: #fff;
+  padding: 12px 14px;
+  outline: none;
+}
+
+.block-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #fff;
+  text-align: left;
+  cursor: grab;
+  transition: 0.15s ease;
+}
+
+.block-card:hover {
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.08);
+}
+
+.block-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  color: white;
+  flex: 0 0 auto;
+}
+
+.node {
+  position: absolute;
+  width: 310px;
+  border-radius: 12px;
+  background: #30343b;
+  box-shadow: 0 18px 50px rgba(0,0,0,0.35);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: white;
+  user-select: none;
+}
+
+.node-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  cursor: grab;
+}
+
+.node-body {
+  padding: 0 14px 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.node-field label {
+  display: block;
+  margin-bottom: 5px;
+  color: #aeb5c0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.node-field input,
+.node-field textarea,
+.node-field select {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: #252930;
+  color: white;
+  padding: 9px 10px;
+  font-size: 13px;
+  outline: none;
+}
+
+.node-field textarea { min-height: 76px; resize: vertical; }
+
+.node-port {
+  position: absolute;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  border-radius: 999px;
+  background: #3b82f6;
+  border: 2px solid #282c33;
+}
+
+.node-port.in { top: -8px; }
+.node-port.out { bottom: -8px; }
+
+.node-remove {
+  margin-left: auto;
+  border: 0;
+  background: rgba(255,255,255,0.08);
+  color: white;
+  border-radius: 8px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.builder-btn {
+  border: 0;
+  border-radius: 10px;
+  background: #5865f2;
+  color: white;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+.builder-btn.danger { background: #ef4444; }
+.builder-btn.muted { background: #2f333a; }
+
+.tutorial-box {
+  position: absolute;
+  right: 24px;
+  top: 88px;
+  z-index: 40;
+  width: 330px;
+  border-radius: 16px;
+  background: #111827;
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow: 0 24px 70px rgba(0,0,0,.45);
+  color: white;
+  padding: 18px;
+}
+
+.tutorial-box.hidden { display: none; }
+
+.connection-line {
+  position: absolute;
+  height: 3px;
+  background: #3b82f6;
+  transform-origin: left center;
+  pointer-events: none;
+  border-radius: 999px;
+}
+
+@media (max-width: 900px) {
+  .bright-builder-shell { grid-template-columns: 1fr; }
+  .builder-sidebar { max-height: 360px; }
+}
