@@ -1,4 +1,4 @@
-const { ChannelType, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
+const { ChannelType, EmbedBuilder } = require("discord.js");
 const backupState = require("./roleChannelBackupState");
 
 function makeBackupId() {
@@ -50,22 +50,24 @@ async function sendBackupEmbed(client, guild, storageChannelId, snapshot) {
 
   const embed = new EmbedBuilder()
     .setTitle(`Backup ID: ${snapshot.id}`)
-    .setDescription(`Server backup for **${guild.name}**\nUse \`/backup ${snapshot.id}\` in the original server to restore.`)
+    .setDescription(
+      `Manual server backup for **${guild.name}**\n` +
+      `Restore from the original server with \`/backup load backup_id:${snapshot.id}\`.`
+    )
     .addFields(
       { name: "Guild ID", value: guild.id, inline: true },
       { name: "Roles", value: String(snapshot.roles.length), inline: true },
-      { name: "Channels", value: String(snapshot.channels.length), inline: true }
+      { name: "Channels", value: String(snapshot.channels.length), inline: true },
+      { name: "Safety", value: "This backup was created manually with `/backup save`. It will not be overwritten automatically." }
     )
-    .setFooter({ text: "Do not delete this message. It contains the backup attachment." })
+    .setFooter({ text: "Do not delete this message. The JSON attachment contains the restore data." })
     .setTimestamp(snapshot.createdAt);
 
   const json = Buffer.from(JSON.stringify(snapshot, null, 2));
-  const sent = await channel.send({
+  return channel.send({
     embeds: [embed],
     files: [{ attachment: json, name: `${snapshot.id}.json` }],
   });
-
-  return sent;
 }
 
 async function createSnapshot(client, guild) {
@@ -106,7 +108,7 @@ async function createSnapshot(client, guild) {
 
 async function findBackupAttachment(client, guildId, backupId) {
   const config = backupState.get(guildId);
-  if (!config?.storageChannelId) throw new Error("No backup storage channel configured");
+  if (!config?.storageChannelId) throw new Error("No backup storage channel configured. Run /backup setup first.");
 
   const channel = await client.channels.fetch(config.storageChannelId).catch(() => null);
   if (!channel?.isTextBased?.()) throw new Error("Backup storage channel not found");
@@ -144,9 +146,7 @@ async function restoreBackup(client, guild, backupId) {
   const url = await findBackupAttachment(client, guild.id, backupId);
   const snapshot = await fetchJson(url);
 
-  if (snapshot.guildId !== guild.id) {
-    throw new Error("Backup belongs to a different server");
-  }
+  if (snapshot.guildId !== guild.id) throw new Error("Backup belongs to a different server");
 
   const roleMap = new Map();
 
@@ -162,11 +162,8 @@ async function restoreBackup(client, guild, backupId) {
       reason: `Restoring backup ${backupId}`,
     };
 
-    if (!role) {
-      role = await guild.roles.create(payload).catch(() => null);
-    } else if (role.editable) {
-      await role.edit(payload).catch(() => null);
-    }
+    if (!role) role = await guild.roles.create(payload).catch(() => null);
+    else if (role.editable) await role.edit(payload).catch(() => null);
 
     if (role) roleMap.set(savedRole.id, role.id);
   }
@@ -224,11 +221,7 @@ async function restoreBackup(client, guild, backupId) {
     if (channel) channelMap.set(savedChannel.id, channel.id);
   }
 
-  return {
-    backupId,
-    roles: snapshot.roles.length,
-    channels: snapshot.channels.length,
-  };
+  return { backupId, roles: snapshot.roles.length, channels: snapshot.channels.length };
 }
 
 module.exports = function roleChannelBackup(client) {
@@ -237,19 +230,5 @@ module.exports = function roleChannelBackup(client) {
     restoreBackup: (guild, backupId) => restoreBackup(client, guild, backupId),
   };
 
-  client.once("ready", async () => {
-    for (const cfg of backupState.all()) {
-      const guild = client.guilds.cache.get(cfg.guildId);
-      if (guild && cfg.enabled) await createSnapshot(client, guild).catch(() => null);
-    }
-  });
-
-  client.on("roleCreate", (role) => createSnapshot(client, role.guild).catch(() => null));
-  client.on("roleUpdate", (_, role) => createSnapshot(client, role.guild).catch(() => null));
-  client.on("roleDelete", (role) => createSnapshot(client, role.guild).catch(() => null));
-  client.on("channelCreate", (channel) => channel.guild && createSnapshot(client, channel.guild).catch(() => null));
-  client.on("channelUpdate", (_, channel) => channel.guild && createSnapshot(client, channel.guild).catch(() => null));
-  client.on("channelDelete", (channel) => channel.guild && createSnapshot(client, channel.guild).catch(() => null));
-
-  client.logger.success("RoleChannelBackup loaded");
+  client.logger.success("RoleChannelBackup loaded in manual-save mode");
 };
