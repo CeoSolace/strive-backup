@@ -1,27 +1,29 @@
-const { AuditLogEvent, PermissionFlagsBits } = require("discord.js");
+const { AuditLogEvent, ChannelType, PermissionFlagsBits } = require("discord.js");
 
 /**
  * PermissionGuard
  *
- * First real security layer:
+ * Real security layer:
  * - Watches role permission changes
  * - Detects dangerous permissions being added
  * - Instantly reverts the role back to its previous permissions
- * - Optionally removes dangerous roles from the executor
- *
- * This is prevention-first, not log-first.
+ * - Stores a short rollback record so admins can approve/undo the revert
+ * - Splits logs into two private admin channels
  */
 module.exports = function permissionGuard(client) {
   const config = {
     enabled: true,
 
-    // Users that can change dangerous permissions without being reverted
     trustedUsers: [...(client.config?.OWNER_IDS || [])],
-
-    // If true, removes dangerous roles from the person who made the change
     containExecutor: true,
 
-    // Permissions that should never be added without trust
+    channels: {
+      blocks: "security-permission-blocks",
+      actions: "security-permission-actions",
+    },
+
+    maxRollbackRecords: 50,
+
     protectedPermissions: [
       PermissionFlagsBits.Administrator,
       PermissionFlagsBits.ManageGuild,
@@ -38,6 +40,8 @@ module.exports = function permissionGuard(client) {
   if (!config.enabled) return;
 
   const revertCooldown = new Set();
+  const channelCache = new Map();
+  const rollbackRecords = [];
 
   function isTrusted(userId) {
     return config.trustedUsers.includes(userId);
@@ -51,6 +55,18 @@ module.exports = function permissionGuard(client) {
 
   function formatPermission(permission) {
     return Object.entries(PermissionFlagsBits).find(([, value]) => value === permission)?.[0] || String(permission);
+  }
+
+  function trimRollbackRecords() {
+    while (rollbackRecords.length > config.maxRollbackRecords) rollbackRecords.shift();
+  }
+
+  function getRollbackRecord(guildId, roleId) {
+    const matching = rollbackRecords
+      .filter((record) => record.guildId === guildId && (!roleId || record.roleId === roleId))
+      .sort((a, b) => b.createdAt - a.createdAt);
+
+    return matching[0] || null;
   }
 
   async function getExecutor(guild, roleId) {
@@ -68,10 +84,17 @@ module.exports = function permissionGuard(client) {
     }
   }
 
-  async function getPrivateSecurityChannel(guild) {
-    const channelName = "security-permissions";
+  async function getPrivateSecurityChannel(guild, channelName, introMessage) {
+    const cacheKey = `${guild.id}:${channelName}`;
+    const cachedId = channelCache.get(cacheKey);
+    const cached = cachedId ? guild.channels.cache.get(cachedId) : null;
+    if (cached?.isTextBased?.()) return cached;
+
     let channel = guild.channels.cache.find((ch) => ch.name === channelName && ch.isTextBased?.());
-    if (channel) return channel;
+    if (channel) {
+      channelCache.set(cacheKey, channel.id);
+      return channel;
+    }
 
     const me = guild.members.me;
     if (!me?.permissions.has(PermissionFlagsBits.ManageChannels)) return null;
@@ -84,6 +107,7 @@ module.exports = function permissionGuard(client) {
 
     channel = await guild.channels.create({
       name: channelName,
+      type: ChannelType.GuildText,
       reason: "PermissionGuard private security channel",
       permissionOverwrites: [
         {
@@ -101,13 +125,27 @@ module.exports = function permissionGuard(client) {
       ],
     }).catch(() => null);
 
-    if (channel) {
-      await channel.send({
-        content: "**PermissionGuard enabled**\nThis private channel logs dangerous permission changes that were automatically reverted.",
-      }).catch(() => null);
+    if (channel && introMessage) {
+      await channel.send({ content: introMessage }).catch(() => null);
     }
 
     return channel;
+  }
+
+  async function ensureChannels(guild) {
+    const blocks = await getPrivateSecurityChannel(
+      guild,
+      config.channels.blocks,
+      "**PermissionGuard Blocks enabled**\nThis private channel logs permission escalations that were blocked and reverted."
+    );
+
+    const actions = await getPrivateSecurityChannel(
+      guild,
+      config.channels.actions,
+      "**PermissionGuard Actions enabled**\nThis private channel logs admin-approved undo/revert actions and containment results."
+    );
+
+    return { blocks, actions };
   }
 
   async function removeExecutorDangerousRoles(guild, executor) {
@@ -130,28 +168,107 @@ module.exports = function permissionGuard(client) {
       "PermissionGuard containment: attempted dangerous permission escalation"
     ).catch(() => null);
 
-    return dangerousRoles.map((role) => role.name);
+    return dangerousRoles.map((role) => ({ id: role.id, name: role.name }));
   }
 
-  async function logRevert(oldRole, newRole, executor, addedPermissions, removedRoles) {
-    const channel = await getPrivateSecurityChannel(newRole.guild);
-    if (!channel) return;
+  async function logBlock(oldRole, newRole, executor, addedPermissions, removedRoles, recordId) {
+    const { blocks } = await ensureChannels(newRole.guild);
+    if (!blocks) return;
 
     const permissionList = addedPermissions.map(formatPermission).map((p) => `\`${p}\``).join(", ");
-    const removedRoleText = removedRoles.length ? removedRoles.map((r) => `\`${r}\``).join(", ") : "None";
+    const removedRoleText = removedRoles.length ? removedRoles.map((r) => `\`${r.name}\``).join(", ") : "None";
 
     const content = [
       "**PermissionGuard Blocked Permission Escalation**",
+      `Record ID: \`${recordId}\``,
       `Role: **${newRole.name}** (${newRole.id})`,
       `Executor: ${executor ? `**${executor.tag}** (${executor.id})` : "Unknown"}`,
       `Blocked permissions: ${permissionList}`,
       `Action taken: **Role permissions reverted instantly**`,
       `Executor roles removed: ${removedRoleText}`,
+      "",
+      `To approve this change anyway, run: \`,permissionguard revert ${newRole.id}\` or \`/permissionguard revert role:${newRole.name}\``,
       `Time: <t:${Math.floor(Date.now() / 1000)}:F>`,
     ].join("\n");
 
-    await channel.send({ content }).catch(() => null);
+    await blocks.send({ content }).catch(() => null);
   }
+
+  async function logAction(guild, content) {
+    const { actions } = await ensureChannels(guild);
+    if (actions) await actions.send({ content }).catch(() => null);
+  }
+
+  async function approveRevert(guild, roleId, moderator) {
+    const record = getRollbackRecord(guild.id, roleId);
+    if (!record) {
+      return { ok: false, message: "No recent PermissionGuard revert record found for that role." };
+    }
+
+    if (record.approved) {
+      return { ok: false, message: "That revert was already undone/approved." };
+    }
+
+    const role = await guild.roles.fetch(record.roleId).catch(() => null);
+    if (!role) {
+      return { ok: false, message: "The role from that revert record no longer exists." };
+    }
+
+    const cooldownKey = `${guild.id}:${role.id}`;
+    revertCooldown.add(cooldownKey);
+
+    try {
+      await role.setPermissions(
+        BigInt(record.blockedBitfield),
+        `PermissionGuard revert approved by ${moderator?.tag || moderator?.id || "unknown admin"}`
+      );
+
+      record.approved = true;
+      record.approvedBy = moderator?.id || null;
+      record.approvedAt = Date.now();
+
+      await logAction(
+        guild,
+        [
+          "**PermissionGuard Revert Approved**",
+          `Record ID: \`${record.id}\``,
+          `Role: **${role.name}** (${role.id})`,
+          `Approved by: ${moderator ? `**${moderator.tag}** (${moderator.id})` : "Unknown"}`,
+          `Restored permissions: ${record.addedPermissions.map(formatPermission).map((p) => `\`${p}\``).join(", ")}`,
+          `Time: <t:${Math.floor(Date.now() / 1000)}:F>`,
+        ].join("\n")
+      );
+
+      return { ok: true, message: `PermissionGuard revert undone for ${role.name}. The blocked permissions were restored.` };
+    } catch (err) {
+      client.logger.error("PermissionGuard failed to approve revert", err);
+      return { ok: false, message: "Failed to restore the blocked permissions. Check my role hierarchy and Manage Roles permission." };
+    } finally {
+      setTimeout(() => revertCooldown.delete(cooldownKey), 5_000);
+    }
+  }
+
+  client.permissionGuard = {
+    config,
+    ensureChannels,
+    getLastRevert(guildId, roleId) {
+      const record = getRollbackRecord(guildId, roleId);
+      if (!record) return null;
+      return {
+        id: record.id,
+        guildId: record.guildId,
+        roleId: record.roleId,
+        roleName: record.roleName,
+        executorId: record.executorId,
+        executorTag: record.executorTag,
+        addedPermissions: record.addedPermissions.map(formatPermission),
+        removedRoles: record.removedRoles,
+        createdAt: record.createdAt,
+        approved: record.approved,
+      };
+    },
+    approveRevert,
+  };
 
   client.on("roleUpdate", async (oldRole, newRole) => {
     if (!oldRole.guild || oldRole.managed || newRole.managed) return;
@@ -174,7 +291,25 @@ module.exports = function permissionGuard(client) {
       );
 
       const removedRoles = await removeExecutorDangerousRoles(newRole.guild, executor);
-      await logRevert(oldRole, newRole, executor, addedPermissions, removedRoles);
+      const recordId = `${Date.now().toString(36)}-${newRole.id.slice(-4)}`;
+
+      rollbackRecords.push({
+        id: recordId,
+        guildId: newRole.guild.id,
+        roleId: newRole.id,
+        roleName: newRole.name,
+        executorId: executor?.id || null,
+        executorTag: executor?.tag || null,
+        safeBitfield: oldRole.permissions.bitfield.toString(),
+        blockedBitfield: newRole.permissions.bitfield.toString(),
+        addedPermissions,
+        removedRoles,
+        createdAt: Date.now(),
+        approved: false,
+      });
+      trimRollbackRecords();
+
+      await logBlock(oldRole, newRole, executor, addedPermissions, removedRoles, recordId);
 
       client.logger.warn(
         `[PermissionGuard] Reverted dangerous permission change on role ${newRole.name} in ${newRole.guild.name}`
@@ -188,12 +323,12 @@ module.exports = function permissionGuard(client) {
 
   client.once("ready", async () => {
     for (const guild of client.guilds.cache.values()) {
-      await getPrivateSecurityChannel(guild).catch(() => null);
+      await ensureChannels(guild).catch(() => null);
     }
   });
 
   client.on("guildCreate", async (guild) => {
-    await getPrivateSecurityChannel(guild).catch(() => null);
+    await ensureChannels(guild).catch(() => null);
   });
 
   client.logger.success("PermissionGuard loaded");
