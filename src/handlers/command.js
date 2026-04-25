@@ -6,11 +6,13 @@ const { getSettings } = require("@schemas/Guild");
 
 const cooldownCache = new Map();
 
-async function safeInteractionReply(interaction, payload) {
+async function sendInteraction(interaction, payload) {
   try {
-    if (interaction.deferred || interaction.replied) return interaction.followUp(payload);
+    if (interaction.deferred) return interaction.editReply(payload);
+    if (interaction.replied) return interaction.followUp(payload);
     return interaction.reply(payload);
-  } catch {
+  } catch (err) {
+    interaction.client?.logger?.error?.("sendInteraction", err);
     return null;
   }
 }
@@ -72,48 +74,53 @@ module.exports = {
 
   handleSlashCommand: async function (interaction) {
     const cmd = interaction.client.slashCommands.get(interaction.commandName);
-    if (!cmd) return safeInteractionReply(interaction, { content: "An error has occurred", flags: 64 });
+    if (!cmd) return sendInteraction(interaction, { content: "An error has occurred", flags: 64 });
+
+    try {
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply(cmd.slashCommand?.ephemeral ? { flags: 64 } : {});
+      }
+    } catch (err) {
+      interaction.client.logger.error("deferReply", err);
+      return;
+    }
 
     if (cmd.validations) {
       for (const validation of cmd.validations) {
-        if (!validation.callback(interaction)) return safeInteractionReply(interaction, { content: validation.message, flags: 64 });
+        if (!validation.callback(interaction)) return sendInteraction(interaction, { content: validation.message });
       }
     }
 
     if (cmd.category === "OWNER" && !OWNER_IDS.includes(interaction.user.id)) {
-      return safeInteractionReply(interaction, { content: "This command is only accessible to bot owners", flags: 64 });
+      return sendInteraction(interaction, { content: "This command is only accessible to bot owners" });
     }
 
     if (interaction.member && cmd.userPermissions?.length > 0) {
       if (!interaction.member.permissions.has(cmd.userPermissions)) {
-        return safeInteractionReply(interaction, { content: `You need ${parsePermissions(cmd.userPermissions)} for this command`, flags: 64 });
+        return sendInteraction(interaction, { content: `You need ${parsePermissions(cmd.userPermissions)} for this command` });
       }
     }
 
     if (cmd.botPermissions && cmd.botPermissions.length > 0) {
       if (!interaction.guild.members.me.permissions.has(cmd.botPermissions)) {
-        return safeInteractionReply(interaction, { content: `I need ${parsePermissions(cmd.botPermissions)} for this command`, flags: 64 });
+        return sendInteraction(interaction, { content: `I need ${parsePermissions(cmd.botPermissions)} for this command` });
       }
     }
 
     if (cmd.cooldown > 0) {
       const remaining = getRemainingCooldown(interaction.user.id, cmd);
       if (remaining > 0) {
-        return safeInteractionReply(interaction, {
+        return sendInteraction(interaction, {
           content: `You are on cooldown. You can again use the command in \`${timeformat(remaining)}\``,
-          flags: 64,
         });
       }
     }
 
     try {
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply(cmd.slashCommand.ephemeral ? { flags: 64 } : {});
-      }
       const settings = await getSettings(interaction.guild);
       await cmd.interactionRun(interaction, { settings });
     } catch (ex) {
-      await safeInteractionReply(interaction, { content: "Oops! An error occurred while running the command" });
+      await sendInteraction(interaction, { content: "Oops! An error occurred while running the command" });
       interaction.client.logger.error("interactionRun", ex);
     } finally {
       if (cmd.cooldown > 0) applyCooldown(interaction.user.id, cmd);
