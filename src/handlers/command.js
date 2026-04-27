@@ -4,13 +4,45 @@ const { parsePermissions } = require("@helpers/Utils");
 const { timeformat } = require("@helpers/Utils");
 const { getSettings } = require("@schemas/Guild");
 
+const EPHEMERAL_FLAG = 64;
 const cooldownCache = new Map();
 
-async function sendInteraction(interaction, payload) {
+function normalizeInteractionPayload(payload, fallbackEphemeral = false) {
+  if (!payload || typeof payload !== "object") {
+    return fallbackEphemeral ? { content: payload, flags: EPHEMERAL_FLAG } : payload;
+  }
+
+  const next = { ...payload };
+  const shouldBeEphemeral = Boolean(next.ephemeral || fallbackEphemeral);
+
+  delete next.ephemeral;
+
+  if (shouldBeEphemeral) {
+    next.flags = Number(next.flags || 0) | EPHEMERAL_FLAG;
+  }
+
+  return next;
+}
+
+function patchInteractionReplies(interaction, defaultEphemeral = false) {
+  if (interaction.__striveReplyPatchApplied) return;
+  interaction.__striveReplyPatchApplied = true;
+
+  for (const method of ["reply", "deferReply", "editReply", "followUp"]) {
+    if (typeof interaction[method] !== "function") continue;
+
+    const original = interaction[method].bind(interaction);
+    interaction[method] = (payload = {}) => original(normalizeInteractionPayload(payload, defaultEphemeral));
+  }
+}
+
+async function sendInteraction(interaction, payload, fallbackEphemeral = false) {
   try {
-    if (interaction.deferred) return interaction.editReply(payload);
-    if (interaction.replied) return interaction.followUp(payload);
-    return interaction.reply(payload);
+    const safePayload = normalizeInteractionPayload(payload, fallbackEphemeral);
+
+    if (interaction.deferred) return interaction.editReply(safePayload);
+    if (interaction.replied) return interaction.followUp(safePayload);
+    return interaction.reply(safePayload);
   } catch (err) {
     interaction.client?.logger?.error?.("sendInteraction", err);
     return null;
@@ -74,11 +106,15 @@ module.exports = {
 
   handleSlashCommand: async function (interaction) {
     const cmd = interaction.client.slashCommands.get(interaction.commandName);
-    if (!cmd) return sendInteraction(interaction, { content: "An error has occurred", flags: 64 });
+    const commandEphemeral = Boolean(cmd?.slashCommand?.ephemeral);
+
+    patchInteractionReplies(interaction, commandEphemeral);
+
+    if (!cmd) return sendInteraction(interaction, { content: "An error has occurred" }, true);
 
     try {
       if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply(cmd.slashCommand?.ephemeral ? { flags: 64 } : {});
+        await interaction.deferReply({});
       }
     } catch (err) {
       interaction.client.logger.error("deferReply", err);
@@ -87,23 +123,23 @@ module.exports = {
 
     if (cmd.validations) {
       for (const validation of cmd.validations) {
-        if (!validation.callback(interaction)) return sendInteraction(interaction, { content: validation.message });
+        if (!validation.callback(interaction)) return sendInteraction(interaction, { content: validation.message }, commandEphemeral);
       }
     }
 
     if (cmd.category === "OWNER" && !OWNER_IDS.includes(interaction.user.id)) {
-      return sendInteraction(interaction, { content: "This command is only accessible to bot owners" });
+      return sendInteraction(interaction, { content: "This command is only accessible to bot owners" }, commandEphemeral);
     }
 
     if (interaction.member && cmd.userPermissions?.length > 0) {
       if (!interaction.member.permissions.has(cmd.userPermissions)) {
-        return sendInteraction(interaction, { content: `You need ${parsePermissions(cmd.userPermissions)} for this command` });
+        return sendInteraction(interaction, { content: `You need ${parsePermissions(cmd.userPermissions)} for this command` }, commandEphemeral);
       }
     }
 
     if (cmd.botPermissions && cmd.botPermissions.length > 0) {
       if (!interaction.guild.members.me.permissions.has(cmd.botPermissions)) {
-        return sendInteraction(interaction, { content: `I need ${parsePermissions(cmd.botPermissions)} for this command` });
+        return sendInteraction(interaction, { content: `I need ${parsePermissions(cmd.botPermissions)} for this command` }, commandEphemeral);
       }
     }
 
@@ -112,7 +148,7 @@ module.exports = {
       if (remaining > 0) {
         return sendInteraction(interaction, {
           content: `You are on cooldown. You can again use the command in \`${timeformat(remaining)}\``,
-        });
+        }, commandEphemeral);
       }
     }
 
@@ -120,7 +156,7 @@ module.exports = {
       const settings = await getSettings(interaction.guild);
       await cmd.interactionRun(interaction, { settings });
     } catch (ex) {
-      await sendInteraction(interaction, { content: "Oops! An error occurred while running the command" });
+      await sendInteraction(interaction, { content: "Oops! An error occurred while running the command" }, commandEphemeral);
       interaction.client.logger.error("interactionRun", ex);
     } finally {
       if (cmd.cooldown > 0) applyCooldown(interaction.user.id, cmd);
