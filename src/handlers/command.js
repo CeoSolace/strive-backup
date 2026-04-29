@@ -9,44 +9,62 @@ const cooldownCache = new Map();
 
 function normalizeInteractionPayload(payload, fallbackEphemeral = false) {
   if (!payload || typeof payload !== "object") {
-    return fallbackEphemeral ? { content: payload, flags: EPHEMERAL_FLAG } : payload;
+    return fallbackEphemeral ? { content: String(payload || ""), flags: EPHEMERAL_FLAG } : { content: String(payload || "") };
   }
 
   const next = { ...payload };
   const shouldBeEphemeral = Boolean(next.ephemeral || fallbackEphemeral);
-
   delete next.ephemeral;
 
-  if (shouldBeEphemeral) {
-    next.flags = Number(next.flags || 0) | EPHEMERAL_FLAG;
-  }
-
+  if (shouldBeEphemeral) next.flags = Number(next.flags || 0) | EPHEMERAL_FLAG;
   return next;
+}
+
+async function sendInteraction(interaction, payload, fallbackEphemeral = false) {
+  const safePayload = normalizeInteractionPayload(payload, fallbackEphemeral);
+
+  try {
+    if (interaction.deferred) return await interaction.editReply(safePayload);
+    if (interaction.replied) return await interaction.followUp(safePayload);
+    return await interaction.reply(safePayload);
+  } catch (err) {
+    const msg = String(err?.message || err || "");
+    if (msg.includes("Unknown interaction") || msg.includes("already been sent or deferred")) {
+      try {
+        if (interaction.deferred) return await interaction.editReply(safePayload);
+        return await interaction.followUp(safePayload);
+      } catch (_) {
+        return null;
+      }
+    }
+    interaction.client?.logger?.error?.("sendInteraction", err);
+    return null;
+  }
 }
 
 function patchInteractionReplies(interaction, defaultEphemeral = false) {
   if (interaction.__striveReplyPatchApplied) return;
   interaction.__striveReplyPatchApplied = true;
 
-  for (const method of ["reply", "deferReply", "editReply", "followUp"]) {
-    if (typeof interaction[method] !== "function") continue;
+  const originalReply = interaction.reply.bind(interaction);
+  const originalDeferReply = interaction.deferReply.bind(interaction);
+  const originalEditReply = interaction.editReply.bind(interaction);
+  const originalFollowUp = interaction.followUp.bind(interaction);
 
-    const original = interaction[method].bind(interaction);
-    interaction[method] = (payload = {}) => original(normalizeInteractionPayload(payload, defaultEphemeral));
-  }
-}
+  interaction.reply = (payload = {}) => {
+    const safePayload = normalizeInteractionPayload(payload, defaultEphemeral);
+    if (interaction.deferred) return originalEditReply(safePayload);
+    if (interaction.replied) return originalFollowUp(safePayload);
+    return originalReply(safePayload);
+  };
 
-async function sendInteraction(interaction, payload, fallbackEphemeral = false) {
-  try {
-    const safePayload = normalizeInteractionPayload(payload, fallbackEphemeral);
+  interaction.deferReply = (payload = {}) => {
+    if (interaction.deferred || interaction.replied) return Promise.resolve(null);
+    return originalDeferReply(normalizeInteractionPayload(payload, defaultEphemeral));
+  };
 
-    if (interaction.deferred) return interaction.editReply(safePayload);
-    if (interaction.replied) return interaction.followUp(safePayload);
-    return interaction.reply(safePayload);
-  } catch (err) {
-    interaction.client?.logger?.error?.("sendInteraction", err);
-    return null;
-  }
+  interaction.editReply = (payload = {}) => originalEditReply(normalizeInteractionPayload(payload, defaultEphemeral));
+  interaction.followUp = (payload = {}) => originalFollowUp(normalizeInteractionPayload(payload, defaultEphemeral));
 }
 
 module.exports = {
@@ -55,10 +73,7 @@ module.exports = {
     const args = message.content.replace(prefix, "").split(/\s+/);
     const invoke = args.shift().toLowerCase();
 
-    const data = {};
-    data.settings = settings;
-    data.prefix = prefix;
-    data.invoke = invoke;
+    const data = { settings, prefix, invoke };
 
     if (!message.channel.permissionsFor(message.guild.members.me).has("SendMessages")) return;
 
@@ -68,20 +83,14 @@ module.exports = {
       }
     }
 
-    if (cmd.category === "OWNER" && !OWNER_IDS.includes(message.author.id)) {
-      return message.safeReply("This command is only accessible to bot owners");
+    if (cmd.category === "OWNER" && !OWNER_IDS.includes(message.author.id)) return message.safeReply("This command is only accessible to bot owners");
+
+    if (cmd.userPermissions?.length > 0 && !message.channel.permissionsFor(message.member).has(cmd.userPermissions)) {
+      return message.safeReply(`You need ${parsePermissions(cmd.userPermissions)} for this command`);
     }
 
-    if (cmd.userPermissions && cmd.userPermissions?.length > 0) {
-      if (!message.channel.permissionsFor(message.member).has(cmd.userPermissions)) {
-        return message.safeReply(`You need ${parsePermissions(cmd.userPermissions)} for this command`);
-      }
-    }
-
-    if (cmd.botPermissions && cmd.botPermissions.length > 0) {
-      if (!message.channel.permissionsFor(message.guild.members.me).has(cmd.botPermissions)) {
-        return message.safeReply(`I need ${parsePermissions(cmd.botPermissions)} for this command`);
-      }
+    if (cmd.botPermissions?.length > 0 && !message.channel.permissionsFor(message.guild.members.me).has(cmd.botPermissions)) {
+      return message.safeReply(`I need ${parsePermissions(cmd.botPermissions)} for this command`);
     }
 
     if (cmd.command.minArgsCount > args.length) {
@@ -112,15 +121,6 @@ module.exports = {
 
     if (!cmd) return sendInteraction(interaction, { content: "An error has occurred" }, true);
 
-    try {
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({});
-      }
-    } catch (err) {
-      interaction.client.logger.error("deferReply", err);
-      return;
-    }
-
     if (cmd.validations) {
       for (const validation of cmd.validations) {
         if (!validation.callback(interaction)) return sendInteraction(interaction, { content: validation.message }, commandEphemeral);
@@ -131,24 +131,18 @@ module.exports = {
       return sendInteraction(interaction, { content: "This command is only accessible to bot owners" }, commandEphemeral);
     }
 
-    if (interaction.member && cmd.userPermissions?.length > 0) {
-      if (!interaction.member.permissions.has(cmd.userPermissions)) {
-        return sendInteraction(interaction, { content: `You need ${parsePermissions(cmd.userPermissions)} for this command` }, commandEphemeral);
-      }
+    if (interaction.member && cmd.userPermissions?.length > 0 && !interaction.member.permissions.has(cmd.userPermissions)) {
+      return sendInteraction(interaction, { content: `You need ${parsePermissions(cmd.userPermissions)} for this command` }, commandEphemeral);
     }
 
-    if (cmd.botPermissions && cmd.botPermissions.length > 0) {
-      if (!interaction.guild.members.me.permissions.has(cmd.botPermissions)) {
-        return sendInteraction(interaction, { content: `I need ${parsePermissions(cmd.botPermissions)} for this command` }, commandEphemeral);
-      }
+    if (cmd.botPermissions?.length > 0 && !interaction.guild.members.me.permissions.has(cmd.botPermissions)) {
+      return sendInteraction(interaction, { content: `I need ${parsePermissions(cmd.botPermissions)} for this command` }, commandEphemeral);
     }
 
     if (cmd.cooldown > 0) {
       const remaining = getRemainingCooldown(interaction.user.id, cmd);
       if (remaining > 0) {
-        return sendInteraction(interaction, {
-          content: `You are on cooldown. You can again use the command in \`${timeformat(remaining)}\``,
-        }, commandEphemeral);
+        return sendInteraction(interaction, { content: `You are on cooldown. You can again use the command in \`${timeformat(remaining)}\`` }, commandEphemeral);
       }
     }
 
@@ -198,8 +192,7 @@ module.exports = {
 };
 
 function applyCooldown(memberId, cmd) {
-  const key = cmd.name + "|" + memberId;
-  cooldownCache.set(key, Date.now());
+  cooldownCache.set(cmd.name + "|" + memberId, Date.now());
 }
 
 function getRemainingCooldown(memberId, cmd) {
