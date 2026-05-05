@@ -1,27 +1,29 @@
 <% layout('layouts/app') -%>
+<%
+  const guilds = user?.displayedGuilds || user?.guilds || [];
+%>
 
-<div class="flex flex-col gap-6">
+<section class="space-y-6">
   <div>
-    <h1 class="text-2xl font-semibold tracking-tight">Automations</h1>
-    <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">Select a server below to manage automations.</p>
+    <h1 class="text-3xl font-black text-white">Automation access</h1>
+    <p class="mt-2 text-white/60">Automations are configured per server. Select a server below to open its configuration panel.</p>
   </div>
-  <% if (user?.displayedGuilds && user.displayedGuilds.length > 0) { %>
-  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-    <% user.displayedGuilds.forEach(function(g) { %>
-      <a class="action" href="/manage/<%= g.id %>?tab=automations">
-        <div class="flex items-center gap-3">
-          <img class="h-8 w-8 rounded-full" src="<%= g.iconURL %>" alt="" referrerpolicy="no-referrer" />
-          <div class="min-w-0">
-            <div class="truncate font-semibold"><%= g.name %></div>
-            <div class="action-sub">Manage automations</div>
-          </div>
-        </div>
-      </a>
-    <% }); %>
-  </div>
+
+  <% if (guilds.length > 0) { %>
+    <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <% guilds.forEach((g) => { %>
+        <a href="/manage/<%= g.id %>" class="rounded-2xl border border-white/10 bg-white/[0.04] p-5 transition hover:-translate-y-0.5 hover:border-indigo-400/40 hover:bg-indigo-400/10">
+          <p class="font-black text-white"><%= g.name %></p>
+          <p class="mt-1 text-xs text-white/45">ID: <%= g.id %></p>
+          <p class="mt-4 text-sm font-bold text-indigo-300">Open automation settings →</p>
+        </a>
+      <% }) %>
+    </div>
   <% } else { %>
-  <div class="rounded-2xl border border-zinc-200 p-6 text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
-    You don't have any servers with Manage Guild permission.
-  </div>
+    <div class="rounded-2xl border border-dashed border-white/15 p-6 text-white/60">No servers available. You need Manage Guild permission to configure automations.</div>
   <% } %>
-</div>
+
+  <div class="rounded-2xl border border-yellow-400/20 bg-yellow-400/10 p-4 text-sm text-yellow-200">
+    Note: Full automation editor depends on guild-level routes. This page now safely routes you to working server configs instead of a broken UI.
+  </div>
+</section>
