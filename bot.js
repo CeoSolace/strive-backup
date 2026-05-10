@@ -41,6 +41,14 @@ process.on("warning", (warning) => {
   client.logger?.warn?.(`${warning.name}: ${warning.message}`);
 });
 
+process.on("SIGINT", () => {
+  client.logger?.warn?.("Received SIGINT signal");
+});
+
+process.on("SIGTERM", () => {
+  client.logger?.warn?.("Received SIGTERM signal - host may be restarting service");
+});
+
 async function withTimeout(promise, ms, label) {
   let timer;
 
@@ -112,4 +120,9 @@ async function withTimeout(promise, ms, label) {
   } catch (err) {
     client.logger.error("Failed to register global slash commands", err);
   }
+
+  // keep-alive heartbeat for hosts like Render
+  setInterval(() => {
+    client.logger?.debug?.(`Heartbeat | uptime=${Math.floor(process.uptime())}s | guilds=${client.guilds?.cache?.size || 0}`);
+  }, 300000);
 })();
